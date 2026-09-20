@@ -45,6 +45,11 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { StudyComparison } from "./study-comparison";
+import {
+  COLLECTION_STORAGE_KEY,
+  readSavedCollection,
+  parseCollectionSession,
+} from "@/lib/collection-session";
 import { CaseNotes } from "./case-documentation";
 import type {
   StudyCollection,
@@ -97,6 +102,20 @@ export default function MRIWorkspace({
 }) {
   const [collection, setCollection] = useState<StudyCollection | null>(null);
   const [comparing, setComparing] = useState(false);
+  const collectionInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    try {
+      const saved = readSavedCollection();
+      if (saved) {
+        setCollection(saved.collection);
+        setDocumentation(saved.collection.documentation);
+      }
+    } catch {
+      toast.error(
+        "Saved collection could not be restored. You can open an exported collection file.",
+      );
+    }
+  }, []);
   const [documentation, setDocumentation] = useState<CaseDocumentation | null>(
     null,
   );
@@ -546,8 +565,36 @@ export default function MRIWorkspace({
     base?.dims || [1, 1, 1];
   return (
     <section className="workspace" aria-label="MRI workspace">
+      <input
+        hidden
+        ref={collectionInput}
+        type="file"
+        accept=".json"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (!file) return;
+          try {
+            if (file.size > 20 * 1024 * 1024)
+              throw new Error("Collection file exceeds 20 MB.");
+            const saved = parseCollectionSession(await file.text());
+            localStorage.setItem(COLLECTION_STORAGE_KEY, JSON.stringify(saved));
+            setCollection(saved.collection);
+            setDocumentation(saved.collection.documentation);
+            setComparing(true);
+            toast.success("Collection restored");
+          } catch (error) {
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : "Could not restore collection",
+            );
+          }
+        }}
+      />
       {comparing && active && collection && (
         <StudyComparison
+          key={collection.id}
           collection={collection}
           onClose={() => setComparing(false)}
           onOpen={async (file) => {
@@ -622,6 +669,12 @@ export default function MRIWorkspace({
           </span>
         </div>
         <div className="panel-section">
+          <button
+            className="btn wide"
+            onClick={() => collectionInput.current?.click()}
+          >
+            Open saved collection
+          </button>
           <p className="eyebrow">
             {sample ? "Reference study" : "Loaded study"}
           </p>

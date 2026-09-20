@@ -1,7 +1,38 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import type { CaseDocumentation, Study } from "@/lib/study-collection";
-import { downloadPublic, type RepositoryFile } from "@/lib/repositories";
+import { type RepositoryFile } from "@/lib/repositories";
+import {
+  loadAcquisitionMetadata,
+  type AcquisitionMetadata,
+} from "@/lib/acquisition-metadata";
+
+function ReferenceText({ text }: { text: string }) {
+  return (
+    <>
+      {text
+        .split(/(https?:\/\/[^\s<>"\[\]]+|\b10\.\d{4,9}\/[^\s<>"\[\]]+)/g)
+        .map((part, index) => {
+          const clean = part.replace(/[.,;:)]+$/, "");
+          const url = /^https?:\/\//.test(clean)
+            ? clean
+            : /^10\.\d{4,9}\//.test(clean)
+              ? `https://doi.org/${clean}`
+              : "";
+          return url ? (
+            <span key={index}>
+              <a href={url} target="_blank" rel="noreferrer">
+                {clean}
+              </a>
+              {part.slice(clean.length)}
+            </span>
+          ) : (
+            part
+          );
+        })}
+    </>
+  );
+}
 
 function fieldLabel(key: string) {
   return key
@@ -60,11 +91,15 @@ function MetadataValue({
   }
   return (
     <span>
-      {typeof value === "boolean"
-        ? value
-          ? "Yes"
-          : "No"
-        : String(value) || "Not supplied"}
+      {typeof value === "boolean" ? (
+        value ? (
+          "Yes"
+        ) : (
+          "No"
+        )
+      ) : (
+        <ReferenceText text={String(value) || "Not supplied"} />
+      )}
     </span>
   );
 }
@@ -82,7 +117,9 @@ function DocumentationContent({ text }: { text: string }) {
       <MetadataValue value={parsed.value} />
     </div>
   ) : (
-    <pre>{text}</pre>
+    <pre>
+      <ReferenceText text={text} />
+    </pre>
   );
 }
 
@@ -100,24 +137,31 @@ export function CaseNotes({
   file?: RepositoryFile;
 }) {
   const [acquisition, setAcquisition] = useState("");
+  const [metadata, setMetadata] = useState<AcquisitionMetadata | null>(null);
   useEffect(() => {
     const abort = new AbortController();
     setAcquisition("");
+    setMetadata(null);
     if (
       file?.url?.startsWith("https://s3.amazonaws.com/openneuro.org/") &&
       /\.nii(\.gz)?$/i.test(file.name)
     ) {
-      const url = file.url.replace(/\.nii(\.gz)?$/i, ".json");
-      setAcquisition("Reading acquisition notes…");
-      downloadPublic(url, 1024 * 1024, abort.signal)
-        .then((b) => b.text())
-        .then((text) => {
-          if (!abort.signal.aborted) setAcquisition(text);
+      setAcquisition("Reading shared and scan-specific acquisition notes…");
+      loadAcquisitionMetadata(file.url, abort.signal)
+        .then((result) => {
+          if (!abort.signal.aborted) {
+            setMetadata(result);
+            setAcquisition(
+              result.sources.length
+                ? JSON.stringify(result.values)
+                : "No applicable acquisition metadata was found in the public dataset.",
+            );
+          }
         })
-        .catch(() => {
+        .catch((error) => {
           if (!abort.signal.aborted)
             setAcquisition(
-              "No individual acquisition sidecar is available for this file. Shared acquisition notes may be listed on the source site.",
+              `Acquisition documentation could not be resolved: ${error instanceof Error ? error.message : "Repository request failed"}`,
             );
         });
     }
@@ -162,6 +206,32 @@ export function CaseNotes({
         <details open>
           <summary>Selected scan acquisition notes</summary>
           <DocumentationContent text={acquisition} />
+          {!!metadata?.sources.length && (
+            <details>
+              <summary>Metadata sources and field origins</summary>
+              <p>
+                Shared fields are inherited; files lower in the hierarchy
+                override fields with the same name.
+              </p>
+              <ul>
+                {metadata.sources.map((source) => (
+                  <li key={source.url}>
+                    <a href={source.url} target="_blank" rel="noreferrer">
+                      {source.name}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+              <dl>
+                {Object.entries(metadata.provenance).map(([key, source]) => (
+                  <div key={key}>
+                    <dt>{fieldLabel(key)}</dt>
+                    <dd>{source}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+          )}
         </details>
       )}
       {doc.sections.map((section) => (
