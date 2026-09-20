@@ -83,3 +83,21 @@ rejects((d) => (d.view.panes = { missing: pane }));
 console.log(
   "PASS: per-scan view round-trip, old-format compatibility and invalid view rejection.",
 );
+const upgraded = {
+  ...withPane,
+  view: {
+    ...withPane.view,
+    panes: { [paneKey]: { ...pane, mode: "manual", pixelsPerMM: 2.5 } },
+  },
+};
+assert.equal(
+  parseCollectionSession(JSON.stringify(upgraded)).view.panes?.[paneKey]
+    .pixelsPerMM,
+  2.5,
+);
+rejects((d) => (d.view.panes = { [paneKey]: { ...pane, mode: "unknown" } }));
+rejects((d) => (d.view.panes = { [paneKey]: { ...pane, pixelsPerMM: 0 } }));
+rejects((d) => (d.view.panes = { [paneKey]: { ...pane, pixelsPerMM: 1e400 } }));
+console.log(
+  "PASS: explicit fit/manual state and physical display scale validation.",
+);

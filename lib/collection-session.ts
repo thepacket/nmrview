@@ -20,13 +20,20 @@ const file = z.object({
   url: scanUrl,
 });
 const paneSchema = z.object({
+  mode: z.enum(["fit", "manual"]).optional(),
+  pixelsPerMM: z.number().finite().positive().optional(),
   contrast: z.tuple([z.number(), z.number()]).refine((v) => v[1] > v[0]),
   cursor: z.tuple([
     z.number().min(0).max(1),
     z.number().min(0).max(1),
     z.number().min(0).max(1),
   ]),
-  pan: z.tuple([z.number(), z.number(), z.number(), z.number().positive()]),
+  pan: z.tuple([
+    z.number().finite(),
+    z.number().finite(),
+    z.number().finite(),
+    z.number().finite().positive(),
+  ]),
   frame: z.number().int().nonnegative(),
 });
 export type PaneView = z.infer<typeof paneSchema>;
@@ -69,6 +76,15 @@ const schema = z.object({
     filter: text,
     notes: text.nullable(),
     panes: z.record(z.string(), paneSchema).optional(),
+    arrangement: z
+      .object({
+        kind: z.enum(["participants", "sequences", "visits"]),
+        slots: z
+          .array(z.object({ studyId: text, fileName: text }))
+          .min(1)
+          .max(4),
+      })
+      .optional(),
   }),
 });
 export type CollectionSession = z.infer<typeof schema>;
@@ -94,6 +110,17 @@ export function parseCollectionSession(input: string): CollectionSession {
   const scanKeys = new Set(
     studies.flatMap((s) => s.files.map((f) => paneViewKey(s.id, f.name))),
   );
+  const slots = session.view.arrangement?.slots || [];
+  const slotKeys = slots.map((slot) =>
+    paneViewKey(slot.studyId, slot.fileName),
+  );
+  if (
+    new Set(slotKeys).size !== slotKeys.length ||
+    slotKeys.some((key) => !scanKeys.has(key))
+  )
+    throw new Error(
+      "Comparison arrangement refers to duplicate or unknown scans.",
+    );
   if (Object.keys(session.view.panes || {}).some((key) => !scanKeys.has(key)))
     throw new Error("Saved view refers to an unknown scan.");
   for (const [id, name] of Object.entries(session.view.choices)) {

@@ -1,9 +1,16 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ScanViewController, type ViewMode } from "@/lib/viewer-state";
 import type { Niivue } from "@niivue/niivue";
 import { downloadPublic, type RepositoryFile } from "@/lib/repositories";
 import type { Study, StudyCollection } from "@/lib/study-collection";
-import { matchingScan } from "@/lib/scan-selection";
+import { ComparisonPlanner } from "./comparison-planner";
+import { AcquisitionComparison } from "./acquisition-comparison";
+import type {
+  ComparisonKind,
+  ComparisonArrangement,
+} from "@/lib/comparison-plan";
+import { scanDescriptor, matchingScan } from "@/lib/scan-selection";
 import { ScanPicker } from "./scan-picker";
 import { prepareComparisonFile } from "@/lib/comparison-download";
 import { CaseNotes } from "./case-documentation";
@@ -18,11 +25,18 @@ import {
 export function StudyComparison({
   collection,
   onClose,
+  onLibrary,
   onOpen,
 }: {
   collection: StudyCollection;
   onClose: () => void;
-  onOpen: (file: File) => Promise<void>;
+  onLibrary: () => void;
+  onOpen: (
+    file: File,
+    view: PaneView,
+    study: Study,
+    source: RepositoryFile,
+  ) => Promise<void>;
 }) {
   const [saved] = useState(() => {
     try {
@@ -43,6 +57,31 @@ export function StudyComparison({
   const [panes, setPanes] = useState<Record<string, PaneView>>(
     saved?.panes || {},
   );
+  const [arrangement, setArrangement] = useState<
+    ComparisonArrangement | undefined
+  >(saved?.arrangement);
+  const [planning, setPlanning] = useState<ComparisonKind | null>(null);
+  const [showAcquisition, setShowAcquisition] = useState(false);
+  const slots =
+    arrangement?.slots ||
+    selected.map((studyId) => {
+      const study = collection.studies.find((s) => s.id === studyId)!;
+      return { studyId, fileName: choices[studyId] || study.initialFile };
+    });
+  const displayedScans = slots.map((slot) => ({
+    study: collection.studies.find((s) => s.id === slot.studyId)!,
+    file: collection.studies
+      .find((s) => s.id === slot.studyId)!
+      .files.find((f) => f.name === slot.fileName)!,
+  }));
+  function selectParticipants(
+    update: string[] | ((ids: string[]) => string[]),
+  ) {
+    setArrangement(undefined);
+    setFocused(null);
+    setLocation(null);
+    setSelected(update);
+  }
   const [filter, setFilter] = useState(saved?.filter || "");
   const [layout, setLayout] = useState<string>(saved?.layout || "0");
   const [linked, setLinked] = useState(saved?.linked || false);
@@ -82,9 +121,28 @@ export function StudyComparison({
         format: "nmrview-collection",
         version: 1,
         collection,
-        view: { selected, choices, filter, layout, linked, notes, panes },
+        view: {
+          selected,
+          choices,
+          filter,
+          layout,
+          linked,
+          notes,
+          panes,
+          arrangement,
+        },
       }),
-    [collection, selected, choices, filter, layout, linked, notes, panes],
+    [
+      collection,
+      selected,
+      choices,
+      filter,
+      layout,
+      linked,
+      notes,
+      panes,
+      arrangement,
+    ],
   );
   useEffect(() => {
     try {
@@ -108,6 +166,37 @@ export function StudyComparison({
       className={`study-comparison image-first ${showParticipants ? "participants-open" : ""} ${showTools ? "tools-open" : ""}`}
       aria-label="Participant comparison"
     >
+      {planning && (
+        <ComparisonPlanner
+          key={planning}
+          collection={collection}
+          kind={planning}
+          selected={selected}
+          choices={
+            slots.length
+              ? { ...choices, [slots[0].studyId]: slots[0].fileName }
+              : choices
+          }
+          onClose={() => setPlanning(null)}
+          onApply={(value) => {
+            setArrangement(value);
+            setSelected([...new Set(value.slots.map((s) => s.studyId))]);
+            setChoices((current) => ({
+              ...current,
+              ...Object.fromEntries(
+                value.slots.map((s) => [s.studyId, s.fileName]),
+              ),
+            }));
+            setFocused(null);
+            setLocation(null);
+            setNotes(null);
+            setPlanning(null);
+            setShowParticipants(false);
+            setLinked(false);
+            setMatchStatus("");
+          }}
+        />
+      )}
       <header>
         <div>
           <h2 title={collection.title}>{collection.title}</h2>
@@ -136,6 +225,9 @@ export function StudyComparison({
         >
           Notes
         </button>
+        <button className="btn" onClick={onLibrary}>
+          Collections
+        </button>
         <button className="btn" onClick={onClose}>
           Main viewer
         </button>
@@ -151,6 +243,38 @@ export function StudyComparison({
           Export
         </button>
       </header>
+      <nav className="comparison-presets" aria-label="Arrange comparison">
+        <span>Arrange scans</span>
+        <button
+          className={`btn small ${arrangement?.kind === "participants" ? "active" : ""}`}
+          onClick={() => setPlanning("participants")}
+        >
+          Participants
+        </button>
+        <button
+          className={`btn small ${arrangement?.kind === "sequences" ? "active" : ""}`}
+          onClick={() => setPlanning("sequences")}
+        >
+          Sequences
+        </button>
+        <button
+          className={`btn small ${arrangement?.kind === "visits" ? "active" : ""}`}
+          onClick={() => setPlanning("visits")}
+        >
+          Visits
+        </button>
+        <button
+          className={`btn small ${showAcquisition ? "active" : ""}`}
+          aria-expanded={showAcquisition}
+          onClick={() => setShowAcquisition((v) => !v)}
+        >
+          Acquisition differences
+        </button>
+        <span className="comparison-summary">
+          {slots.length} scans · {arrangement?.kind || "participants"} ·{" "}
+          {linked ? "Relative slice linking" : "Independent navigation"}
+        </span>
+      </nav>
       <div className="comparison-body">
         <aside className="study-list">
           <p role="status">{saveStatus}</p>
@@ -165,7 +289,7 @@ export function StudyComparison({
             Choose up to four studies at once. All participants remain available
             in this list; only displayed scans are downloaded.
           </p>
-          <button className="btn small" onClick={() => setSelected([])}>
+          <button className="btn small" onClick={() => selectParticipants([])}>
             Clear comparison
           </button>
           {collection.studies
@@ -178,7 +302,7 @@ export function StudyComparison({
                     checked={selected.includes(s.id)}
                     disabled={!selected.includes(s.id) && selected.length >= 4}
                     onChange={(e) =>
-                      setSelected((ids) =>
+                      selectParticipants((ids) =>
                         e.target.checked
                           ? [...ids, s.id]
                           : ids.filter((id) => id !== s.id),
@@ -191,7 +315,7 @@ export function StudyComparison({
                 <div>
                   <button
                     className="btn small"
-                    onClick={() => setSelected([s.id])}
+                    onClick={() => selectParticipants([s.id])}
                   >
                     View alone
                   </button>
@@ -226,13 +350,16 @@ export function StudyComparison({
             <span>Participants are not automatically registered.</span>
             <button
               className="btn small"
-              disabled={selected.length < 2}
+              disabled={selected.length < 2 || !!arrangement}
               onClick={matchSelectedScans}
             >
               Match scans to first participant
             </button>
             {matchStatus && <p role="status">{matchStatus}</p>}
           </div>
+          {showAcquisition && slots.length > 0 && (
+            <AcquisitionComparison scans={displayedScans} />
+          )}
           {notes && (
             <div className="comparison-notes">
               <button className="btn" onClick={() => setNotes(null)}>
@@ -247,25 +374,27 @@ export function StudyComparison({
           )}
           <div
             style={{ display: notes ? "none" : undefined }}
-            className={`comparison-grid ${selected.length === 1 || focused ? "single" : ""}`}
+            className={`comparison-grid ${slots.length === 1 || focused ? "single" : ""}`}
           >
-            {!selected.length && (
-              <p>Select a participant from the study list.</p>
-            )}
-            {selected
+            {!slots.length && <p>Select a participant from the study list.</p>}
+            {slots
               .filter(
-                (id) =>
-                  !focused || id === focused || !selected.includes(focused),
+                (slot) =>
+                  !focused ||
+                  paneViewKey(slot.studyId, slot.fileName) === focused,
               )
-              .map((id) => {
+              .map((slot) => {
+                const id = slot.studyId;
                 const s = collection.studies.find((s) => s.id === id)!;
-                const f = s.files.find(
-                  (f) => f.name === (choices[id] || s.initialFile),
-                )!;
+                const f = s.files.find((f) => f.name === slot.fileName)!;
+                const slotId = paneViewKey(id, f.name);
                 return (
                   <ComparisonPane
-                    focused={focused === id}
-                    onFocus={() => setFocused(focused === id ? null : id)}
+                    focused={focused === slotId}
+                    onFocus={() =>
+                      setFocused(focused === slotId ? null : slotId)
+                    }
+                    slotId={slotId}
                     key={paneViewKey(id, f.name)}
                     initialView={panes[paneViewKey(id, f.name)]}
                     onView={(view) =>
@@ -281,9 +410,37 @@ export function StudyComparison({
                     file={f}
                     layout={layout}
                     location={linked ? location : null}
-                    onLocation={(frac) => setLocation({ from: id, frac })}
-                    onFile={(name) => setChoices((c) => ({ ...c, [id]: name }))}
-                    onNotes={() => setNotes(id)}
+                    onLocation={(frac) => setLocation({ from: slotId, frac })}
+                    onFile={(name) => {
+                      if (
+                        slots.some(
+                          (other) =>
+                            other !== slot &&
+                            other.studyId === id &&
+                            other.fileName === name,
+                        )
+                      ) {
+                        setMatchStatus("This scan is already displayed.");
+                        setShowTools(true);
+                        return;
+                      }
+                      if (arrangement)
+                        setArrangement({
+                          ...arrangement,
+                          slots: slots.map((other) =>
+                            other === slot
+                              ? { ...other, fileName: name }
+                              : other,
+                          ),
+                        });
+                      setChoices((c) => ({ ...c, [id]: name }));
+                      setFocused(null);
+                      setLocation(null);
+                    }}
+                    onNotes={() => {
+                      setChoices((c) => ({ ...c, [id]: f.name }));
+                      setNotes(id);
+                    }}
                     onOpen={onOpen}
                   />
                 );
@@ -295,6 +452,7 @@ export function StudyComparison({
   );
 }
 function ComparisonPane({
+  slotId,
   focused,
   onFocus,
   initialView,
@@ -308,6 +466,7 @@ function ComparisonPane({
   onNotes,
   onOpen,
 }: {
+  slotId: string;
   focused: boolean;
   onFocus: () => void;
   initialView?: PaneView;
@@ -319,9 +478,16 @@ function ComparisonPane({
   onLocation: (frac: number[]) => void;
   onFile: (name: string) => void;
   onNotes: () => void;
-  onOpen: (file: File) => Promise<void>;
+  onOpen: (
+    file: File,
+    view: PaneView,
+    study: Study,
+    source: RepositoryFile,
+  ) => Promise<void>;
 }) {
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("fit");
+  const controller = useRef<ScanViewController | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null),
     viewer = useRef<Niivue | null>(null),
     local = useRef<File | null>(null),
@@ -332,19 +498,7 @@ function ComparisonPane({
   viewHandler.current = onView;
   const initial = useRef(initialView);
   function captureView() {
-    const n = viewer.current,
-      image = n?.volumes[0];
-    if (!n || !image) return;
-    setZoom(n.scene.pan2Dxyzmm[3]);
-    setContrast([image.cal_min ?? 0, image.cal_max ?? 1]);
-    viewHandler.current({
-      contrast: [image.cal_min ?? 0, image.cal_max ?? 1],
-      cursor: Array.from(n.scene.crosshairPos).map((v) =>
-        Math.max(0, Math.min(1, v)),
-      ) as PaneView["cursor"],
-      pan: Array.from(n.scene.pan2Dxyzmm) as PaneView["pan"],
-      frame: image.frame4D,
-    });
+    return controller.current?.capture();
   }
   const downloadController = useRef<AbortController | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -427,21 +581,14 @@ function ComparisonPane({
         };
         viewer.current = n;
         local.current = scan;
-        const restored = initial.current;
-        if (restored) {
-          applying.current = true;
-          image.cal_min = restored.contrast[0];
-          image.cal_max = restored.contrast[1];
-          n.scene.crosshairPos = [...restored.cursor];
-          n.setPan2Dxyzmm([...restored.pan]);
-          n.setFrame4D(
-            image.id,
-            Math.min(restored.frame, (image.nFrame4D || 1) - 1),
-          );
-          n.updateGLVolume();
-          n.drawScene();
-          applying.current = false;
-        }
+        controller.current = new ScanViewController(n, (view) => {
+          setZoom(view.pan[3]);
+          setViewMode(view.mode || "fit");
+          setContrast(view.contrast);
+          viewHandler.current(view);
+        });
+        if (initial.current) controller.current.restore(initial.current);
+        else controller.current.fit();
         setZoom(n.scene.pan2Dxyzmm[3]);
         setFrames(image.nFrame4D || 1);
         setFrame(image.frame4D);
@@ -459,17 +606,19 @@ function ComparisonPane({
     })();
     return () => {
       abort.abort();
+      controller.current?.dispose();
+      controller.current = null;
       viewer.current = null;
       local.current = null;
       n?.cleanup();
     };
   }, [file, attempt]);
   useEffect(() => {
-    viewer.current?.setSliceType(Number(layout));
+    controller.current?.setLayout(Number(layout));
   }, [layout, ready]);
   useEffect(() => {
     const n = viewer.current;
-    if (!n || !location || location.from === study.id) return;
+    if (!n || !location || location.from === slotId) return;
     applying.current = true;
     n.scene.crosshairPos = location.frac.map((v) =>
       Math.max(0, Math.min(1, v)),
@@ -477,7 +626,7 @@ function ComparisonPane({
     n.drawScene();
     applying.current = false;
     captureView();
-  }, [location, ready, study.id]);
+  }, [location, ready, slotId]);
   function adjust(index: number, value: number) {
     const n = viewer.current;
     if (!n) return;
@@ -491,11 +640,35 @@ function ComparisonPane({
     captureView();
   }
   return (
-    <article className="comparison-pane">
+    <article
+      className={`comparison-pane ${controlsOpen ? "scan-controls-open" : ""}`}
+    >
       <header>
         <strong>
           {study.participant} {study.session}
+          <small className="pane-sequence">
+            {scanDescriptor(file).type} · {scanDescriptor(file).processing}
+          </small>
         </strong>
+        <button
+          className="btn small"
+          disabled={!ready}
+          aria-label={`Fit image ${study.id}`}
+          onClick={() => controller.current?.fit()}
+        >
+          {viewMode === "fit" ? "Fit ✓" : "Fit image"}
+        </button>
+        <button
+          className="btn small"
+          disabled={!ready}
+          onClick={() => {
+            const view = captureView();
+            if (local.current && view)
+              void onOpen(local.current, view, study, file);
+          }}
+        >
+          Open in main viewer
+        </button>
         <button className="btn small" onClick={onFocus}>
           {focused ? "Show all" : "Expand image"}
         </button>
@@ -516,7 +689,7 @@ function ComparisonPane({
         <canvas
           ref={canvas}
           style={{ visibility: ready ? "visible" : "hidden" }}
-          aria-label={`MRI comparison ${study.id}`}
+          aria-label={`MRI comparison ${study.id} ${file.name.split("/").at(-1)}`}
           onPointerUp={() => requestAnimationFrame(captureView)}
           onTouchEnd={() => requestAnimationFrame(captureView)}
           onWheel={() => requestAnimationFrame(captureView)}
@@ -558,26 +731,19 @@ function ComparisonPane({
           onClick={() => {
             const n = viewer.current!;
             n.scene.crosshairPos = [0.5, 0.5, 0.5];
-            n.setPan2Dxyzmm([0, 0, 0, 1]);
+            controller.current?.fit();
             n.drawScene();
             captureView();
           }}
         >
           Center
         </button>
-        <button
-          className="btn small"
-          disabled={!ready}
-          onClick={() => local.current && onOpen(local.current)}
-        >
-          Open in main viewer
-        </button>
         <label>
-          Zoom
+          {viewMode === "fit" ? "Zoom · fit" : "Zoom · manual"}
           <input
             type="number"
             className="field"
-            aria-label={`Zoom ${study.id}`}
+            aria-label={`Zoom ${study.id} ${file.name.split("/").at(-1)}`}
             disabled={!ready}
             min={0.1}
             max={20}
@@ -588,11 +754,7 @@ function ComparisonPane({
                 n = viewer.current;
               if (!n || !Number.isFinite(value) || value < 0.1 || value > 20)
                 return;
-              const pan = Array.from(n.scene.pan2Dxyzmm) as PaneView["pan"];
-              pan[3] = value;
-              n.setPan2Dxyzmm(pan);
-              n.drawScene();
-              captureView();
+              controller.current?.setZoom(value);
             }}
           />
         </label>
@@ -601,7 +763,7 @@ function ComparisonPane({
           <input
             type="number"
             className="field"
-            aria-label={`Low intensity ${study.id}`}
+            aria-label={`Low intensity ${study.id} ${file.name.split("/").at(-1)}`}
             disabled={!ready}
             value={Number(contrast[0].toFixed(2))}
             onChange={(e) => {
@@ -615,7 +777,7 @@ function ComparisonPane({
           <input
             type="number"
             className="field"
-            aria-label={`High intensity ${study.id}`}
+            aria-label={`High intensity ${study.id} ${file.name.split("/").at(-1)}`}
             disabled={!ready}
             value={Number(contrast[1].toFixed(2))}
             onChange={(e) => {
@@ -628,7 +790,7 @@ function ComparisonPane({
           <label>
             Frame {frame + 1}/{frames}
             <input
-              aria-label={`Frame ${study.id}`}
+              aria-label={`Frame ${study.id} ${file.name.split("/").at(-1)}`}
               type="range"
               min={0}
               max={frames - 1}

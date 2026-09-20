@@ -44,15 +44,21 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { ScanViewController, type ViewMode } from "@/lib/viewer-state";
+import type { RepositoryFile } from "@/lib/repositories";
+import { CollectionLibrary } from "./collection-library";
 import { StudyComparison } from "./study-comparison";
 import {
   COLLECTION_STORAGE_KEY,
   readSavedCollection,
   parseCollectionSession,
+  paneViewKey,
+  type PaneView,
 } from "@/lib/collection-session";
 import { CaseNotes } from "./case-documentation";
 import type {
   StudyCollection,
+  Study,
   CaseDocumentation,
 } from "@/lib/study-collection";
 import { RepositoryBrowser } from "./repositories";
@@ -102,6 +108,39 @@ export default function MRIWorkspace({
 }) {
   const [collection, setCollection] = useState<StudyCollection | null>(null);
   const [comparing, setComparing] = useState(false);
+  const comparingRef = useRef(comparing);
+  comparingRef.current = comparing;
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [collectionRevision, setCollectionRevision] = useState(0);
+  const controller = useRef<ScanViewController | null>(null);
+  const mainScan = useRef<{
+    collectionId: string;
+    study: Study;
+    source: RepositoryFile;
+  } | null>(null);
+  const [caseContext, setCaseContext] = useState<{
+    study: Study;
+    source: RepositoryFile;
+  } | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("fit");
+  function rememberMainView(view: PaneView) {
+    setZoom(view.pan[3]);
+    setViewMode(view.mode || "fit");
+    const context = mainScan.current;
+    if (!context || comparingRef.current) return;
+    try {
+      const saved = readSavedCollection();
+      if (!saved || saved.collection.id !== context.collectionId) return;
+      saved.view.panes = {
+        ...saved.view.panes,
+        [paneViewKey(context.study.id, context.source.name)]: view,
+      };
+      localStorage.setItem(COLLECTION_STORAGE_KEY, JSON.stringify(saved));
+    } catch {
+      /* Explicit collection export remains available if storage is full. */
+    }
+  }
+
   const collectionInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     try {
@@ -190,10 +229,12 @@ export default function MRIWorkspace({
       try {
         await action();
         sync();
+        return true;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         toast.error(msg);
         setError(msg);
+        return false;
       } finally {
         busyRef.current = false;
         setBusy("");
@@ -238,7 +279,10 @@ export default function MRIWorkspace({
           instance.cleanup();
           return;
         }
+        mainScan.current = null;
+        setCaseContext(null);
         nv.current = instance;
+        controller.current = new ScanViewController(instance, rememberMainView);
         instance.onLocationChange = (location) => {
           const l = location as { frac: number[]; mm: number[] };
           if (l.frac) setPos(Array.from(l.frac).slice(0, 3));
@@ -254,6 +298,7 @@ export default function MRIWorkspace({
         ]);
         if (cancelled) return;
         await instance.setVolumeRenderIllumination(0.6);
+        controller.current?.fit();
         setReady(true);
         sync();
         setBusy("");
@@ -267,6 +312,8 @@ export default function MRIWorkspace({
     start();
     return () => {
       cancelled = true;
+      controller.current?.dispose();
+      controller.current = null;
       instance?.cleanup();
       nv.current = null;
     };
@@ -347,7 +394,7 @@ export default function MRIWorkspace({
     const n = nv.current;
     if (!n) return;
     n.scene.crosshairPos = [0.5, 0.5, 0.5];
-    n.setPan2Dxyzmm([0, 0, 0, 1]);
+    controller.current?.fit();
     n.setScale(1);
     n.setGamma(1);
     n.setClipPlane([2, 0, 0]);
@@ -385,8 +432,9 @@ export default function MRIWorkspace({
     );
   }
   useEffect(() => {
-    if (!active) return;
+    if (!active || comparing) return;
     function key(e: KeyboardEvent) {
+      if (controller.current?.interacting) return;
       if (
         (e.target as HTMLElement)?.closest(
           "input,textarea,[role=dialog],[role=combobox]",
@@ -425,7 +473,7 @@ export default function MRIWorkspace({
     }
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [active, layout]);
+  }, [active, layout, comparing]);
   function setLayer(id: string, changes: Partial<Layer>) {
     const n = nv.current;
     if (!n) return;
@@ -463,7 +511,7 @@ export default function MRIWorkspace({
     if (!list.length) return;
     setShowImport(false);
     setPlaying(false);
-    await run("Reading scan data locally…", async () => {
+    return await run("Reading scan data locally…", async () => {
       const n = nv.current;
       if (!n) return;
       if (list.reduce((s, f) => s + f.size, 0) > 512 * 1024 * 1024)
@@ -518,6 +566,8 @@ export default function MRIWorkspace({
         throw new Error(
           "No supported volumes found. Select NIfTI, NRRD, or a complete DICOM series.",
         );
+      mainScan.current = null;
+      setCaseContext(null);
       if (sample || replaceStudy) {
         n.closeDrawing();
         n.clearAllMeasurements();
@@ -544,6 +594,8 @@ export default function MRIWorkspace({
         throw new Error("Session exceeds the 512 MB import limit.");
       const url = URL.createObjectURL(f);
       try {
+        mainScan.current = null;
+        setCaseContext(null);
         await n.loadDocumentFromUrl(url);
         setSample(false);
         setMeasurements([
@@ -556,6 +608,7 @@ export default function MRIWorkspace({
         n.setHighResolutionCapable(0);
         setRadiological(n.opts.isRadiologicalConvention);
         setPos(Array.from(n.scene.crosshairPos));
+        controller.current?.capture();
       } finally {
         URL.revokeObjectURL(url);
       }
@@ -565,6 +618,28 @@ export default function MRIWorkspace({
     base?.dims || [1, 1, 1];
   return (
     <section className="workspace" aria-label="MRI workspace">
+      <CollectionLibrary
+        open={libraryOpen}
+        onClose={() => setLibraryOpen(false)}
+        onImport={() => collectionInput.current?.click()}
+        onOpen={(saved) => {
+          try {
+            localStorage.setItem(COLLECTION_STORAGE_KEY, JSON.stringify(saved));
+            mainScan.current = null;
+            setCollection(saved.collection);
+            setDocumentation(saved.collection.documentation);
+            setCollectionRevision((v) => v + 1);
+            setLibraryOpen(false);
+            setExpanded(false);
+            setComparing(true);
+            setPlaying(false);
+          } catch {
+            toast.error(
+              "Could not open this collection: browser storage is unavailable.",
+            );
+          }
+        }}
+      />
       <input
         hidden
         ref={collectionInput}
@@ -579,8 +654,12 @@ export default function MRIWorkspace({
               throw new Error("Collection file exceeds 20 MB.");
             const saved = parseCollectionSession(await file.text());
             localStorage.setItem(COLLECTION_STORAGE_KEY, JSON.stringify(saved));
+            mainScan.current = null;
             setCollection(saved.collection);
+            setCollectionRevision((v) => v + 1);
+            setLibraryOpen(false);
             setDocumentation(saved.collection.documentation);
+            setExpanded(false);
             setComparing(true);
             toast.success("Collection restored");
           } catch (error) {
@@ -594,11 +673,25 @@ export default function MRIWorkspace({
       />
       {comparing && active && collection && (
         <StudyComparison
-          key={collection.id}
+          key={`${collection.id}:${collectionRevision}`}
+          onLibrary={() => setLibraryOpen(true)}
           collection={collection}
           onClose={() => setComparing(false)}
-          onOpen={async (file) => {
-            await importFiles([file], true);
+          onOpen={async (file, view, study, source) => {
+            controller.current?.capture();
+            const previous = mainScan.current;
+            const sameScan =
+              previous?.collectionId === collection.id &&
+              previous.study.id === study.id &&
+              previous.source.name === source.name;
+            if (!sameScan) {
+              const ok = await importFiles([file], true);
+              if (!ok) return;
+            }
+            mainScan.current = { collectionId: collection.id, study, source };
+            setCaseContext({ study, source });
+            controller.current?.restore(view);
+            sync();
             setDocumentation(collection.documentation);
             setComparing(false);
           }}
@@ -611,7 +704,13 @@ export default function MRIWorkspace({
             Source notes and metadata supplied with the study.
           </DialogDescription>
           <div className="dialog-body">
-            {documentation && <CaseNotes doc={documentation} />}
+            {documentation && (
+              <CaseNotes
+                doc={documentation}
+                study={caseContext?.study}
+                file={caseContext?.source}
+              />
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -650,6 +749,7 @@ export default function MRIWorkspace({
         }}
       />
       <aside
+        inert={comparing}
         className={`panel left-panel ${panel === "layers" ? "mobile-open" : ""}`}
       >
         <div className="panel-head">
@@ -673,7 +773,16 @@ export default function MRIWorkspace({
             className="btn wide"
             onClick={() => collectionInput.current?.click()}
           >
-            Open saved collection
+            Import collection file
+          </button>
+          <button
+            className="btn wide"
+            onClick={() => {
+              controller.current?.capture();
+              setLibraryOpen(true);
+            }}
+          >
+            Collection library
           </button>
           <p className="eyebrow">
             {sample ? "Reference study" : "Loaded study"}
@@ -697,7 +806,10 @@ export default function MRIWorkspace({
             <button
               className="btn wide"
               onClick={() => {
+                controller.current?.capture();
+                setPlaying(false);
                 onClosePanel();
+                setExpanded(false);
                 setComparing(true);
               }}
             >
@@ -866,6 +978,8 @@ export default function MRIWorkspace({
                 await n.loadVolumes([
                   { url: "/data/mni-t1.nii.gz", name: "MNI152_T1.nii.gz" },
                 ]);
+                mainScan.current = null;
+                setCaseContext(null);
                 n.closeDrawing();
                 n.clearAllMeasurements();
                 setMeasurements([]);
@@ -924,10 +1038,17 @@ export default function MRIWorkspace({
           )}
         </div>
       </aside>
-      <div className={`main-view ${expanded ? "mri-expanded" : ""}`}>
+      <div
+        inert={comparing}
+        className={`main-view ${expanded ? "mri-expanded" : ""}`}
+      >
         <div className="view-heading">
           <h1>
-            {sample ? "Brain atlas" : "Loaded study"}{" "}
+            {sample
+              ? "Brain atlas"
+              : caseContext
+                ? `${caseContext.study.participant} ${caseContext.study.session}`
+                : "Loaded study"}{" "}
             <span className="meta">
               / {MODES.find((x) => x[0] === layout)?.[1]}
             </span>
@@ -966,10 +1087,32 @@ export default function MRIWorkspace({
             options={MODES}
             onChange={(v) => {
               setLayout(v);
-              nv.current?.setSliceType(Number(v));
+              controller.current?.setLayout(Number(v));
             }}
           />
           <span className="spacer" />
+          {collection && (
+            <button
+              className="btn small"
+              onClick={() => {
+                controller.current?.capture();
+                setPlaying(false);
+                setExpanded(false);
+                setComparing(true);
+              }}
+            >
+              Compare
+            </button>
+          )}
+          <button
+            className="btn small"
+            onClick={() => {
+              controller.current?.capture();
+              setLibraryOpen(true);
+            }}
+          >
+            Collections
+          </button>
           <button
             className="btn icon"
             aria-label="Reset view"
@@ -1047,6 +1190,17 @@ export default function MRIWorkspace({
         </div>
         <div className="view-bottom">
           <button
+            className={`btn small ${viewMode === "fit" ? "active" : ""}`}
+            disabled={!layers.length || !!busy}
+            onClick={() => controller.current?.fit()}
+            title="Fit the complete reference image; keep fitting when the viewport resizes"
+          >
+            {viewMode === "fit" ? "Fit image ✓" : "Fit image"}
+          </button>
+          <span className="view-mode" role="status">
+            {viewMode === "manual" ? "Manual zoom" : "Auto fit"}
+          </span>
+          <button
             className="btn small"
             disabled={!layers.length || !!busy}
             title="Restore centered slices, base-layer visibility and automatic contrast without removing scans or annotations"
@@ -1073,6 +1227,7 @@ export default function MRIWorkspace({
         </div>
       </div>
       <aside
+        inert={comparing}
         className={`panel right-panel ${panel === "controls" ? "mobile-open" : ""}`}
       >
         <div className="panel-head">
@@ -1218,14 +1373,7 @@ export default function MRIWorkspace({
             unit="×"
             digits={2}
             onChange={(v) => {
-              setZoom(v);
-              const n = nv.current;
-              if (n) {
-                const p = Array.from(n.scene.pan2Dxyzmm);
-                p[3] = v;
-                n.setPan2Dxyzmm(p);
-                n.setScale(v);
-              }
+              controller.current?.setZoom(v);
             }}
           />
         </div>
@@ -1462,10 +1610,13 @@ export default function MRIWorkspace({
                 setCollection(value);
                 setDocumentation(value.documentation);
                 setShowImport(false);
+                setExpanded(false);
                 setComparing(true);
                 setPlaying(false);
               }}
-              onLoad={(files, _source, replace) => importFiles(files, replace)}
+              onLoad={async (files, _source, replace) => {
+                await importFiles(files, replace);
+              }}
             />
             <div className="data-choice">
               <h3>Volumes or DICOM files</h3>
