@@ -19,6 +19,19 @@ const file = z.object({
   size: z.number().nonnegative(),
   url: scanUrl,
 });
+const paneSchema = z.object({
+  contrast: z.tuple([z.number(), z.number()]).refine((v) => v[1] > v[0]),
+  cursor: z.tuple([
+    z.number().min(0).max(1),
+    z.number().min(0).max(1),
+    z.number().min(0).max(1),
+  ]),
+  pan: z.tuple([z.number(), z.number(), z.number(), z.number().positive()]),
+  frame: z.number().int().nonnegative(),
+});
+export type PaneView = z.infer<typeof paneSchema>;
+export const paneViewKey = (study: string, file: string) =>
+  JSON.stringify([study, file]);
 const collection = z.object({
   id: text,
   title: text,
@@ -55,6 +68,7 @@ const schema = z.object({
     linked: z.boolean(),
     filter: text,
     notes: text.nullable(),
+    panes: z.record(z.string(), paneSchema).optional(),
   }),
 });
 export type CollectionSession = z.infer<typeof schema>;
@@ -77,6 +91,11 @@ export function parseCollectionSession(input: string): CollectionSession {
     if (!study.files.some((f) => f.name === study.initialFile))
       throw new Error("Missing default scan.");
   }
+  const scanKeys = new Set(
+    studies.flatMap((s) => s.files.map((f) => paneViewKey(s.id, f.name))),
+  );
+  if (Object.keys(session.view.panes || {}).some((key) => !scanKeys.has(key)))
+    throw new Error("Saved view refers to an unknown scan.");
   for (const [id, name] of Object.entries(session.view.choices)) {
     if (!studies.find((s) => s.id === id)?.files.some((f) => f.name === name))
       throw new Error("Missing selected scan.");

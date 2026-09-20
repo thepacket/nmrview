@@ -59,3 +59,27 @@ assert.throws(() => parseCollectionSession("{broken"));
 console.log(
   "PASS: collection round-trip, selections, metadata, versions, limits and source URL validation.",
 );
+const paneKey = JSON.stringify(["sub-01/", file.name]);
+const pane = {
+  contrast: [10, 200],
+  cursor: [0.2, 0.4, 0.6],
+  pan: [1, 2, 3, 1.5],
+  frame: 4,
+};
+const withPane = {
+  ...data,
+  view: { ...data.view, panes: { [paneKey]: pane } },
+};
+assert.deepEqual(parseCollectionSession(JSON.stringify(withPane)).view.panes, {
+  [paneKey]: pane,
+});
+rejects(
+  (d) => (d.view.panes = { [paneKey]: { ...pane, contrast: [200, 10] } }),
+);
+rejects((d) => (d.view.panes = { [paneKey]: { ...pane, cursor: [2, 0, 0] } }));
+rejects((d) => (d.view.panes = { [paneKey]: { ...pane, frame: -1 } }));
+rejects((d) => (d.view.panes = { [paneKey]: { ...pane, pan: [0, 0, 0, 0] } }));
+rejects((d) => (d.view.panes = { missing: pane }));
+console.log(
+  "PASS: per-scan view round-trip, old-format compatibility and invalid view rejection.",
+);

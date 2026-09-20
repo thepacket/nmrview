@@ -12,6 +12,8 @@ import {
   COLLECTION_STORAGE_KEY,
   readSavedCollection,
   parseCollectionSession,
+  paneViewKey,
+  type PaneView,
 } from "@/lib/collection-session";
 export function StudyComparison({
   collection,
@@ -37,6 +39,9 @@ export function StudyComparison({
   );
   const [choices, setChoices] = useState<Record<string, string>>(
     saved?.choices || {},
+  );
+  const [panes, setPanes] = useState<Record<string, PaneView>>(
+    saved?.panes || {},
   );
   const [filter, setFilter] = useState(saved?.filter || "");
   const [layout, setLayout] = useState<string>(saved?.layout || "0");
@@ -74,9 +79,9 @@ export function StudyComparison({
         format: "nmrview-collection",
         version: 1,
         collection,
-        view: { selected, choices, filter, layout, linked, notes },
+        view: { selected, choices, filter, layout, linked, notes, panes },
       }),
-    [collection, selected, choices, filter, layout, linked, notes],
+    [collection, selected, choices, filter, layout, linked, notes, panes],
   );
   useEffect(() => {
     try {
@@ -234,7 +239,17 @@ export function StudyComparison({
               )!;
               return (
                 <ComparisonPane
-                  key={id}
+                  key={paneViewKey(id, f.name)}
+                  initialView={panes[paneViewKey(id, f.name)]}
+                  onView={(view) =>
+                    setPanes((current) => {
+                      const key = paneViewKey(id, f.name);
+                      return JSON.stringify(current[key]) ===
+                        JSON.stringify(view)
+                        ? current
+                        : { ...current, [key]: view };
+                    })
+                  }
                   study={s}
                   file={f}
                   layout={layout}
@@ -253,6 +268,8 @@ export function StudyComparison({
   );
 }
 function ComparisonPane({
+  initialView,
+  onView,
   study,
   file,
   layout,
@@ -262,6 +279,8 @@ function ComparisonPane({
   onNotes,
   onOpen,
 }: {
+  initialView?: PaneView;
+  onView: (view: PaneView) => void;
   study: Study;
   file: RepositoryFile;
   layout: string;
@@ -277,6 +296,24 @@ function ComparisonPane({
     locationHandler = useRef(onLocation),
     applying = useRef(false);
   locationHandler.current = onLocation;
+  const viewHandler = useRef(onView);
+  viewHandler.current = onView;
+  const initial = useRef(initialView);
+  function captureView() {
+    const n = viewer.current,
+      image = n?.volumes[0];
+    if (!n || !image) return;
+    setZoom(n.scene.pan2Dxyzmm[3]);
+    setContrast([image.cal_min ?? 0, image.cal_max ?? 1]);
+    viewHandler.current({
+      contrast: [image.cal_min ?? 0, image.cal_max ?? 1],
+      cursor: Array.from(n.scene.crosshairPos).map((v) =>
+        Math.max(0, Math.min(1, v)),
+      ) as PaneView["cursor"],
+      pan: Array.from(n.scene.pan2Dxyzmm) as PaneView["pan"],
+      frame: image.frame4D,
+    });
+  }
   const downloadController = useRef<AbortController | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState(""),
@@ -284,6 +321,7 @@ function ComparisonPane({
     [ready, setReady] = useState(false),
     [frame, setFrame] = useState(0),
     [frames, setFrames] = useState(1),
+    [zoom, setZoom] = useState(1),
     [contrast, setContrast] = useState<[number, number]>([0, 1]);
   useEffect(() => {
     const abort = new AbortController();
@@ -357,8 +395,24 @@ function ComparisonPane({
         };
         viewer.current = n;
         local.current = scan;
+        const restored = initial.current;
+        if (restored) {
+          applying.current = true;
+          image.cal_min = restored.contrast[0];
+          image.cal_max = restored.contrast[1];
+          n.scene.crosshairPos = [...restored.cursor];
+          n.setPan2Dxyzmm([...restored.pan]);
+          n.setFrame4D(
+            image.id,
+            Math.min(restored.frame, (image.nFrame4D || 1) - 1),
+          );
+          n.updateGLVolume();
+          n.drawScene();
+          applying.current = false;
+        }
+        setZoom(n.scene.pan2Dxyzmm[3]);
         setFrames(image.nFrame4D || 1);
-        setFrame(0);
+        setFrame(image.frame4D);
         setContrast([image.cal_min ?? 0, image.cal_max ?? 1]);
         setReady(true);
         setStatus("");
@@ -390,6 +444,7 @@ function ComparisonPane({
     ) as [number, number, number];
     n.drawScene();
     applying.current = false;
+    captureView();
   }, [location, ready, study.id]);
   function adjust(index: number, value: number) {
     const n = viewer.current;
@@ -401,6 +456,7 @@ function ComparisonPane({
     n.volumes[0].cal_min = next[0];
     n.volumes[0].cal_max = next[1];
     n.updateGLVolume();
+    captureView();
   }
   return (
     <article className="comparison-pane">
@@ -418,6 +474,10 @@ function ComparisonPane({
           ref={canvas}
           style={{ visibility: ready ? "visible" : "hidden" }}
           aria-label={`MRI comparison ${study.id}`}
+          onPointerUp={() => requestAnimationFrame(captureView)}
+          onTouchEnd={() => requestAnimationFrame(captureView)}
+          onWheel={() => requestAnimationFrame(captureView)}
+          onKeyUp={() => requestAnimationFrame(captureView)}
         />
         {status && <p role="status">{status}</p>}
         {error && <p role="alert">{error}</p>}
@@ -451,6 +511,7 @@ function ComparisonPane({
             n.scene.crosshairPos = [0.5, 0.5, 0.5];
             n.setPan2Dxyzmm([0, 0, 0, 1]);
             n.drawScene();
+            captureView();
           }}
         >
           Center
@@ -462,6 +523,30 @@ function ComparisonPane({
         >
           Open in main viewer
         </button>
+        <label>
+          Zoom
+          <input
+            type="number"
+            className="field"
+            aria-label={`Zoom ${study.id}`}
+            disabled={!ready}
+            min={0.1}
+            max={20}
+            step={0.1}
+            value={Number(zoom.toFixed(2))}
+            onChange={(e) => {
+              const value = e.target.valueAsNumber,
+                n = viewer.current;
+              if (!n || !Number.isFinite(value) || value < 0.1 || value > 20)
+                return;
+              const pan = Array.from(n.scene.pan2Dxyzmm) as PaneView["pan"];
+              pan[3] = value;
+              n.setPan2Dxyzmm(pan);
+              n.drawScene();
+              captureView();
+            }}
+          />
+        </label>
         <label>
           Low
           <input
@@ -504,6 +589,7 @@ function ComparisonPane({
                 setFrame(value);
                 const n = viewer.current!;
                 n.setFrame4D(n.volumes[0].id, value);
+                captureView();
               }}
             />
           </label>
