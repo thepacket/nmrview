@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+import { searchDatasets } from "../lib/repository-search.ts";
+import { compatibleFiles } from "../lib/repository-compatibility.ts";
+const original = globalThis.fetch;
+let requests = 0;
+try {
+  globalThis.fetch = async (url) => {
+    requests++;
+    const page = new URL(String(url)).searchParams.get("page");
+    return Response.json({
+      hits: {
+        hits:
+          page === "1"
+            ? [
+                {
+                  id: 4683021,
+                  metadata: { access_right: "open", title: "Pathology" },
+                  files: [{ key: "IHC.xlsx", size: 100 }],
+                },
+              ]
+            : [
+                {
+                  id: 7,
+                  metadata: { access_right: "open", title: "MRI" },
+                  files: [{ key: "scan.nii.gz", size: 100 }],
+                },
+              ],
+      },
+      links: page === "1" ? { next: "next" } : {},
+    });
+  };
+  const signal = new AbortController().signal;
+  const result = await searchDatasets(
+    "zenodo",
+    "parathyroid",
+    "dataset",
+    signal,
+  );
+  assert.deepEqual(
+    result.hits.map((h) => h.id),
+    ["7"],
+  );
+  assert.equal(requests, 2); // Empty incompatible page skipped without user intervention.
+  assert.equal(result.total, undefined); // Never present unfiltered total as compatible count.
+  assert.deepEqual(
+    await compatibleFiles(
+      [
+        { name: "pathology.jpg", size: 100 },
+        { name: "measurements.xlsx", size: 100 },
+      ],
+      "nmr",
+      signal,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    await compatibleFiles(
+      [{ name: "huge.zip", size: 61 * 1024 * 1024 }],
+      "nmr",
+      signal,
+    ),
+    [],
+  );
+  assert.equal(requests, 2); // Obviously incompatible files require no downloads.
+} finally {
+  globalThis.fetch = original;
+}
+console.log(
+  "PASS: incompatible records hidden, compatible records retained, empty pages skipped and oversize archives excluded.",
+);

@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import {describeRepositoryFile, recommendedFile} from "../lib/repository-file-guide.ts";
+const names = ['ds/sub-01/anat/sub-01_T1w.nii.gz','ds/derivatives/sub-02/anat/sub-02_T1w.nii.gz','ds/sub-01/anat/sub-01_T1w_brain_mask.nii.gz','ds/sub-01/func/sub-01_task-rest_bold.nii.gz'];
+assert.equal(describeRepositoryFile(names[2],"mri").rank,0);
+assert.equal(describeRepositoryFile(names[3],"mri").rank,0);
+assert.equal(describeRepositoryFile('ds/sub-01/ses-02/anat/sub-01_ses-02_T2w.nii.gz',"mri").context,'sub-01 · ses-02');
+assert.equal(recommendedFile(names.reverse().map(name=>({name,size:100})),"mri")?.name,'ds/sub-01/anat/sub-01_T1w.nii.gz');
+assert.equal(recommendedFile([{name:'unknown.nii.gz',size:100}],"mri"),undefined);
+assert.equal(recommendedFile([{name:'collection.zip',size:100},{name:'Menthol.jdx',size:100}],"nmr")?.name,'Menthol.jdx');
+console.log('PASS: anatomical recommendations, overlay exclusions, participant/session labels and spectrum guidance.');

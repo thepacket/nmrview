@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Brain,
+  Maximize2,
+  Minimize2,
   Layers,
   SlidersHorizontal,
   Crosshair,
@@ -42,6 +44,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { StudyComparison } from "./study-comparison";
+import { CaseNotes } from "./case-documentation";
+import type {
+  StudyCollection,
+  CaseDocumentation,
+} from "@/lib/study-collection";
+import { RepositoryBrowser } from "./repositories";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { loadDicomConverter } from "@/lib/dicom";
@@ -86,6 +95,12 @@ export default function MRIWorkspace({
   active: boolean;
   importTick: number;
 }) {
+  const [collection, setCollection] = useState<StudyCollection | null>(null);
+  const [comparing, setComparing] = useState(false);
+  const [documentation, setDocumentation] = useState<CaseDocumentation | null>(
+    null,
+  );
+  const [notesOpen, setNotesOpen] = useState(false);
   const canvas = useRef<HTMLCanvasElement>(null),
     nv = useRef<Niivue | null>(null),
     files = useRef<HTMLInputElement>(null),
@@ -107,6 +122,8 @@ export default function MRIWorkspace({
     [ruler, setRuler] = useState(true),
     [zoom, setZoom] = useState(1),
     [gamma, setGamma] = useState(1),
+    [expanded, setExpanded] = useState(false),
+    [nearest, setNearest] = useState(false),
     [clip, setClip] = useState(2),
     [pos, setPos] = useState<number[]>([0.5, 0.5, 0.5]),
     [mm, setMM] = useState<number[]>([0, 0, 0]),
@@ -174,10 +191,10 @@ export default function MRIWorkspace({
         if (cancelled || !canvas.current) return;
         instance = new Niivue({
           backColor: [0.03, 0.045, 0.06, 1],
-          crosshairColor: [0.4, 0.85, 0.76, 0.65],
+          crosshairColor: [1, 0.85, 0.05, 1],
           show3Dcrosshair: true,
           gradientAmount: 0.6,
-          crosshairWidth: 0.1,
+          crosshairWidth: 0.5,
           crosshairWidthUnit: "percent",
           isColorbar: false,
           isRuler: true,
@@ -188,6 +205,15 @@ export default function MRIWorkspace({
           dragAndDropEnabled: false,
           isRadiologicalConvention: false,
         });
+        // NiiVue renders occluded cursor segments at 15% opacity. Keep the
+        // depth cue, but make the cursor readable through a full-head volume.
+        const drawCrosshairs = instance.drawCrosshairs3D.bind(instance);
+        instance.drawCrosshairs3D = (
+          ...args: Parameters<Niivue["drawCrosshairs3D"]>
+        ) => {
+          if (args[0] === false) args[1] = 0.55;
+          drawCrosshairs(...args);
+        };
         await instance.attachToCanvas(canvas.current);
         if (cancelled) {
           instance.cleanup();
@@ -227,10 +253,16 @@ export default function MRIWorkspace({
     };
   }, [sync]);
   useEffect(() => {
-    if (active && nv.current)
-      requestAnimationFrame(() => nv.current?.resizeListener());
-    else setPlaying(false);
-  }, [active]);
+    if (!active) {
+      setPlaying(false);
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      nv.current?.resizeListener();
+      nv.current?.drawScene();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [active, ready, panel, expanded]);
   useEffect(() => {
     if (importTick !== prevImport.current) {
       prevImport.current = importTick;
@@ -309,6 +341,30 @@ export default function MRIWorkspace({
     setPlaying(false);
     n.drawScene();
   }
+  function restoreImages() {
+    const n = nv.current;
+    if (!n?.volumes.length) return;
+    reset();
+    // Recover display settings without replacing scans, labels or measurements.
+    const baseVolume = n.volumes[0];
+    n.setOpacity(0, 1);
+    baseVolume.cal_min = baseVolume.robust_min;
+    baseVolume.cal_max = baseVolume.robust_max;
+    n.opts.crosshairColor = [1, 0.85, 0.05, 1];
+    n.opts.crosshairWidthUnit = "percent";
+    n.opts.show3Dcrosshair = true;
+    n.setCrosshairWidth(0.5);
+    setCross(true);
+    setLayout("3");
+    n.setSliceType(3);
+    setTool("crosshair");
+    n.updateGLVolume();
+    n.resizeListener();
+    sync();
+    toast.success(
+      "Images restored: centered view, visible base layer and automatic contrast.",
+    );
+  }
   useEffect(() => {
     if (!active) return;
     function key(e: KeyboardEvent) {
@@ -325,7 +381,10 @@ export default function MRIWorkspace({
         (t) => t.key.toLowerCase() === e.key.toLowerCase(),
       );
       if (found) setTool(found.id);
-      if (e.key === "Escape") setTool("crosshair");
+      if (e.key === "Escape") {
+        setTool("crosshair");
+        setExpanded(false);
+      }
       if (e.key === " ") {
         e.preventDefault();
         setPlaying((p) => !p);
@@ -381,7 +440,7 @@ export default function MRIWorkspace({
       setSelected(v.id);
     });
   }
-  async function importFiles(list: File[]) {
+  async function importFiles(list: File[], replaceStudy = false) {
     if (!list.length) return;
     setShowImport(false);
     setPlaying(false);
@@ -440,7 +499,7 @@ export default function MRIWorkspace({
         throw new Error(
           "No supported volumes found. Select NIfTI, NRRD, or a complete DICOM series.",
         );
-      if (sample) {
+      if (sample || replaceStudy) {
         n.closeDrawing();
         n.clearAllMeasurements();
         setMeasurements([]);
@@ -474,6 +533,8 @@ export default function MRIWorkspace({
         ]);
         setLayout(String(n.opts.sliceType));
         setCross(n.opts.crosshairWidth > 0);
+        setNearest(n.opts.isNearestInterpolation);
+        n.setHighResolutionCapable(0);
         setRadiological(n.opts.isRadiologicalConvention);
         setPos(Array.from(n.scene.crosshairPos));
       } finally {
@@ -485,6 +546,28 @@ export default function MRIWorkspace({
     base?.dims || [1, 1, 1];
   return (
     <section className="workspace" aria-label="MRI workspace">
+      {comparing && active && collection && (
+        <StudyComparison
+          collection={collection}
+          onClose={() => setComparing(false)}
+          onOpen={async (file) => {
+            await importFiles([file], true);
+            setDocumentation(collection.documentation);
+            setComparing(false);
+          }}
+        />
+      )}
+      <Dialog open={notesOpen} onOpenChange={setNotesOpen}>
+        <DialogContent>
+          <DialogTitle>Study documentation</DialogTitle>
+          <DialogDescription>
+            Source notes and metadata supplied with the study.
+          </DialogDescription>
+          <div className="dialog-body">
+            {documentation && <CaseNotes doc={documentation} />}
+          </div>
+        </DialogContent>
+      </Dialog>
       <input
         hidden
         ref={files}
@@ -540,7 +623,7 @@ export default function MRIWorkspace({
         </div>
         <div className="panel-section">
           <p className="eyebrow">
-            {sample ? "Reference study" : "Local study"}
+            {sample ? "Reference study" : "Loaded study"}
           </p>
           <h2 className="study-title">
             {sample
@@ -557,6 +640,16 @@ export default function MRIWorkspace({
           </span>
         </div>
         <div className="panel-section">
+          {collection && (
+            <button className="btn wide" onClick={() => setComparing(true)}>
+              Compare participants ({collection.studies.length} studies)
+            </button>
+          )}
+          {documentation && (
+            <button className="btn wide" onClick={() => setNotesOpen(true)}>
+              Study documentation
+            </button>
+          )}
           <div className="control-label">
             <span className="eyebrow">Volume layers</span>
             <button
@@ -772,14 +865,23 @@ export default function MRIWorkspace({
           )}
         </div>
       </aside>
-      <div className="main-view">
+      <div className={`main-view ${expanded ? "mri-expanded" : ""}`}>
         <div className="view-heading">
           <h1>
-            {sample ? "Brain atlas" : "Local study"}{" "}
+            {sample ? "Brain atlas" : "Loaded study"}{" "}
             <span className="meta">
               / {MODES.find((x) => x[0] === layout)?.[1]}
             </span>
           </h1>
+          <button
+            className="btn icon"
+            aria-label={expanded ? "Exit expanded view" : "Expand MRI view"}
+            title={expanded ? "Exit expanded view (Escape)" : "Expand MRI view"}
+            aria-pressed={expanded}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? <Minimize2 /> : <Maximize2 />}
+          </button>
           <span className="badge">
             {radiological ? "RADIOLOGICAL" : "NEUROLOGICAL"}
           </span>
@@ -859,6 +961,18 @@ export default function MRIWorkspace({
               </button>
             </div>
           )}
+          {ready &&
+            layers.length > 0 &&
+            layers.every((v) => v.opacity === 0) &&
+            !busy && (
+              <div className="loading" role="status">
+                <EyeOff />
+                <span>All MRI layers are hidden</span>
+                <button className="btn primary" onClick={restoreImages}>
+                  Show images
+                </button>
+              </div>
+            )}
           {ready && !layers.length && (
             <div className="loading">
               <Brain />
@@ -873,6 +987,14 @@ export default function MRIWorkspace({
           )}
         </div>
         <div className="view-bottom">
+          <button
+            className="btn small"
+            disabled={!layers.length || !!busy}
+            title="Restore centered slices, base-layer visibility and automatic contrast without removing scans or annotations"
+            onClick={restoreImages}
+          >
+            Restore images
+          </button>
           <button
             className={`btn icon ${playing ? "active" : ""}`}
             disabled={!layers.length}
@@ -916,6 +1038,33 @@ export default function MRIWorkspace({
           </h2>
           {selectedLayer && (
             <>
+              <p className="meta">
+                Source voxels:{" "}
+                {selectedLayer.spacing
+                  .map((v) => Number(v.toFixed(3)))
+                  .join(" × ")}{" "}
+                mm · {selectedLayer.dims.join(" × ")}
+              </p>
+              <div className="control">
+                <label>Image sampling</label>
+                <Choice
+                  label="Image sampling"
+                  value={nearest ? "native" : "smooth"}
+                  options={[
+                    ["smooth", "Smooth (linear)"],
+                    ["native", "Native voxels (no smoothing)"],
+                  ]}
+                  onChange={(v) => {
+                    setNearest(v === "native");
+                    nv.current?.setInterpolation(v === "native");
+                  }}
+                />
+              </div>
+              <p className="meta">
+                Use a single-plane layout and expand the view to inspect detail.
+                Native voxels show the source resolution; they do not add
+                detail.
+              </p>
               <div className="control">
                 <label>Color map</label>
                 <Choice
@@ -1060,7 +1209,10 @@ export default function MRIWorkspace({
               checked={cross}
               onCheckedChange={(v) => {
                 setCross(v);
-                nv.current?.setCrosshairWidth(v ? 0.1 : 0);
+                if (nv.current) {
+                  nv.current.opts.show3Dcrosshair = v;
+                  nv.current.setCrosshairWidth(v ? 0.5 : 0);
+                }
               }}
             />
           </div>
@@ -1244,6 +1396,18 @@ export default function MRIWorkspace({
             Files are read locally. Select a complete series for DICOM.
           </DialogDescription>
           <div className="dialog-body">
+            <RepositoryBrowser
+              mode="mri"
+              onDocumentation={setDocumentation}
+              onCollection={(value) => {
+                setCollection(value);
+                setDocumentation(value.documentation);
+                setShowImport(false);
+                setComparing(true);
+                setPlaying(false);
+              }}
+              onLoad={(files, _source, replace) => importFiles(files, replace)}
+            />
             <div className="data-choice">
               <h3>Volumes or DICOM files</h3>
               <p>

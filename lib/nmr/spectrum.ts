@@ -38,11 +38,23 @@ export function validateXY(x: number[], y: number[]) {
     throw new Error("A spectrum cannot exceed 2 million data points.");
   if (x.some((v) => !Number.isFinite(v)) || y.some((v) => !Number.isFinite(v)))
     throw new Error("Spectrum contains invalid numeric values.");
-  const pairs = x.map((v, i) => [v, y[i]]).sort((a, b) => a[0] - b[0]);
-  for (let i = 1; i < pairs.length; i++)
-    if (pairs[i][0] === pairs[i - 1][0])
+  // Acquisition axes are normally monotonic. Avoid millions of temporary
+  // pair objects and an unnecessary sort for the common ascending/descending case.
+  let ascending = true,
+    descending = true;
+  for (let i = 1; i < x.length; i++) {
+    ascending &&= x[i] > x[i - 1];
+    descending &&= x[i] < x[i - 1];
+  }
+  if (ascending) return { x, y };
+  if (descending) return { x: x.slice().reverse(), y: y.slice().reverse() };
+  const order = Array.from({ length: x.length }, (_, i) => i).sort(
+    (a, b) => x[a] - x[b],
+  );
+  for (let i = 1; i < order.length; i++)
+    if (x[order[i]] === x[order[i - 1]])
       throw new Error("Chemical shift values must be unique.");
-  return { x: pairs.map((p) => p[0]), y: pairs.map((p) => p[1]) };
+  return { x: order.map((i) => x[i]), y: order.map((i) => y[i]) };
 }
 export function parseSpectrum(
   text: string,
@@ -139,15 +151,112 @@ export function parseSpectrum(
 export function correctedY(s: Spectrum, i: number) {
   return s.y[i] - (s.baseline[0] * s.x[i] + s.baseline[1]);
 }
-export function extent(s: Spectrum) {
-  let max = 0,
-    min = 0;
-  for (let i = 0; i < s.y.length; i++) {
-    const y = correctedY(s, i);
-    max = Math.max(max, y);
-    min = Math.min(min, y);
+// Input arrays are immutable. Weak keys let closed spectra and their indices
+// be collected. Only the current baseline's index is retained per data array.
+const indexCache = new WeakMap<
+  number[],
+  {
+    x: number[];
+    slope: number;
+    intercept: number;
+    min: Int32Array;
+    max: Int32Array;
+    leaves: number;
+    extent: { min: number; max: number };
   }
-  return { max: Math.max(max, 1e-12), min };
+>();
+const BLOCK = 64;
+function signalIndex(s: Spectrum) {
+  const cached = indexCache.get(s.y);
+  if (
+    cached &&
+    cached.x === s.x &&
+    cached.slope === s.baseline[0] &&
+    cached.intercept === s.baseline[1]
+  )
+    return cached;
+  let leaves = 1;
+  while (leaves < Math.ceil(s.y.length / BLOCK)) leaves *= 2;
+  const min = new Int32Array(2 * leaves).fill(-1);
+  const max = new Int32Array(2 * leaves).fill(-1);
+  function choose(a: number, b: number, low: boolean) {
+    if (a < 0) return b;
+    if (b < 0) return a;
+    const ya = correctedY(s, a),
+      yb = correctedY(s, b);
+    return (low ? ya <= yb : ya >= yb) ? a : b;
+  }
+  for (let i = 0; i < s.y.length; i++) {
+    const node = leaves + Math.floor(i / BLOCK);
+    min[node] = choose(min[node], i, true);
+    max[node] = choose(max[node], i, false);
+  }
+  for (let node = leaves - 1; node > 0; node--) {
+    min[node] = choose(min[2 * node], min[2 * node + 1], true);
+    max[node] = choose(max[2 * node], max[2 * node + 1], false);
+  }
+  const index = {
+    x: s.x,
+    slope: s.baseline[0],
+    intercept: s.baseline[1],
+    min,
+    max,
+    leaves,
+    extent: {
+      min: Math.min(0, correctedY(s, min[1])),
+      max: Math.max(1e-12, correctedY(s, max[1])),
+    },
+  };
+  indexCache.set(s.y, index);
+  return index;
+}
+export function extent(s: Spectrum) {
+  return signalIndex(s).extent;
+}
+function rangeExtrema(s: Spectrum, start: number, end: number) {
+  const index = signalIndex(s);
+  let min = start,
+    max = start;
+  let minY = correctedY(s, start),
+    maxY = minY;
+  function include(i: number, low: boolean) {
+    if (i < 0) return;
+    const y = correctedY(s, i);
+    if (low && (y < minY || (y === minY && i < min))) {
+      min = i;
+      minY = y;
+    }
+    if (!low && (y > maxY || (y === maxY && i < max))) {
+      max = i;
+      maxY = y;
+    }
+  }
+  // Scan only incomplete edge blocks; use the tree for complete blocks.
+  while (start < end && start % BLOCK) {
+    include(start, true);
+    include(start++, false);
+  }
+  while (end > start && end % BLOCK) {
+    --end;
+    include(end, true);
+    include(end, false);
+  }
+  let l = index.leaves + start / BLOCK,
+    r = index.leaves + end / BLOCK;
+  while (l < r) {
+    if (l & 1) {
+      include(index.min[l], true);
+      include(index.max[l++], false);
+    }
+    if (r & 1) {
+      --r;
+      include(index.min[r], true);
+      include(index.max[r], false);
+    }
+    l = Math.floor(l / 2);
+    r = Math.floor(r / 2);
+  }
+  return [min, max];
 }
 export function lowerBound(x: number[], v: number) {
   let lo = 0,
@@ -239,12 +348,7 @@ export function plotPoints(
     step = Math.max(1, Math.ceil((b - a) / Math.max(1, buckets)));
   const out: number[] = [];
   for (let i = a; i < b; i += step) {
-    let min = i,
-      max = i;
-    for (let j = i + 1; j < Math.min(b, i + step); j++) {
-      if (correctedY(s, j) < correctedY(s, min)) min = j;
-      if (correctedY(s, j) > correctedY(s, max)) max = j;
-    }
+    const [min, max] = rangeExtrema(s, i, Math.min(b, i + step));
     for (const index of [
       ...new Set([i, min, max, Math.min(b - 1, i + step - 1)]),
     ].sort((x, y) => x - y))

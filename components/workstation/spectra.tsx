@@ -29,6 +29,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { CaseNotes } from "./case-documentation";
+import type { CaseDocumentation } from "@/lib/study-collection";
+import { RepositoryBrowser } from "./repositories";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Range, Choice, downloadBlob } from "./controls";
@@ -37,7 +40,6 @@ import {
   type Peak,
   type Integral,
   COLORS,
-  parseSpectrum,
   correctedY,
   extent,
   integrate,
@@ -45,8 +47,11 @@ import {
   nearestPeak,
   baselineEstimate,
   plotPoints,
-  validateSession,
 } from "@/lib/nmr/spectrum";
+import {
+  importSpectraFiles,
+  importSpectraSession,
+} from "@/lib/nmr/import-client";
 const SAMPLE_SOURCE = "Damien Jeannerat (2021) · Zenodo 4616665 · CC BY 4.0";
 const TOOLS = [
   { id: "zoom", label: "Zoom region", Icon: Search },
@@ -68,6 +73,10 @@ export default function SpectraWorkspace({
   active: boolean;
   importTick: number;
 }) {
+  const [documentation, setDocumentation] = useState<CaseDocumentation | null>(
+    null,
+  );
+  const [notesOpen, setNotesOpen] = useState(false);
   const [spectra, setSpectra] = useState<Spectrum[]>([]),
     [selected, setSelected] = useState(""),
     [busy, setBusy] = useState(""),
@@ -170,12 +179,13 @@ export default function SpectraWorkspace({
             throw new Error(
               "Sample spectrum could not be loaded. You can import a local JCAMP file.",
             );
-          return parseSpectrum(await r.text(), name, SAMPLE_SOURCE);
+          return { file: await r.blob(), name, source: SAMPLE_SOURCE };
         }),
       );
-      const all = items
-        .flat()
-        .map((s, i) => ({ ...s, color: COLORS[i % COLORS.length] }));
+      const all = (await importSpectraFiles(items)).map((s, i) => ({
+        ...s,
+        color: COLORS[i % COLORS.length],
+      }));
       setSpectra(all);
       setSelected(all[0].id);
       setPeaks([]);
@@ -246,18 +256,23 @@ export default function SpectraWorkspace({
       setReferenceIntegral("");
     }
   }
-  async function importSpectra(list: File[]) {
+  async function importSpectra(
+    list: File[],
+    source = "Local file",
+    replace = false,
+  ) {
     if (!list.length) return;
     setImportOpen(false);
     await execute("Parsing local spectra…", async () => {
       if (list.reduce((s, f) => s + f.size, 0) > 60 * 1024 * 1024)
         throw new Error("Import up to 60 MB of spectra at a time.");
-      const parsed: Spectrum[] = [];
-      for (const f of list)
-        parsed.push(...parseSpectrum(await f.text(), cleanName(f.name)));
-      const existing = spectra.every((s) => s.source === SAMPLE_SOURCE)
-        ? []
-        : spectra;
+      const parsed = await importSpectraFiles(
+        list.map((file) => ({ file, name: cleanName(file.name), source })),
+      );
+      const existing =
+        replace || spectra.every((s) => s.source === SAMPLE_SOURCE)
+          ? []
+          : spectra;
       if (existing.length + parsed.length > 24)
         throw new Error("A session supports up to 24 spectra.");
       if (
@@ -289,15 +304,15 @@ export default function SpectraWorkspace({
   function plotY(s: Spectrum, index: number, row: number) {
     return plotYValue(s, correctedY(s, index) * s.gain, row);
   }
+  const floor = normalized
+    ? Math.min(
+        0,
+        ...visible.map((v) => stats.get(v.id)!.min / stats.get(v.id)!.max),
+      )
+    : globalMin / globalMax;
   function plotYValue(s: Spectrum, raw: number, row: number) {
     const scale = normalized ? stats.get(s.id)!.max : globalMax;
     const y = raw / scale;
-    const floor = normalized
-      ? Math.min(
-          0,
-          ...visible.map((v) => stats.get(v.id)!.min / stats.get(v.id)!.max),
-        )
-      : globalMin / globalMax;
     const rowH = ph / (layout === "stacked" ? Math.max(1, visible.length) : 1);
     const rowTop = layout === "stacked" ? row * rowH : 0;
     const range = 1.15 - Math.min(-0.12, floor);
@@ -455,7 +470,7 @@ export default function SpectraWorkspace({
     await execute("Restoring spectroscopy session…", async () => {
       if (f.size > 120 * 1024 * 1024)
         throw new Error("Session is larger than 120 MB.");
-      const s = validateSession(JSON.parse(await f.text()));
+      const s = await importSpectraSession(f);
       setSpectra(s.spectra);
       setSelected(s.spectra[0]?.id || "");
       setPeaks(s.peaks);
@@ -470,6 +485,14 @@ export default function SpectraWorkspace({
   }
   return (
     <section className="workspace" aria-label="NMR workspace">
+      {documentation && (
+        <button
+          className="btn spectrum-case-notes"
+          onClick={() => setNotesOpen(true)}
+        >
+          Study documentation
+        </button>
+      )}
       <input
         ref={fileInput}
         hidden
@@ -1367,6 +1390,17 @@ export default function SpectraWorkspace({
           </div>
         )}
       </aside>
+      <Dialog open={notesOpen} onOpenChange={setNotesOpen}>
+        <DialogContent>
+          <DialogTitle>Study documentation</DialogTitle>
+          <DialogDescription>
+            Source notes supplied with these spectra.
+          </DialogDescription>
+          <div className="dialog-body">
+            {documentation && <CaseNotes doc={documentation} />}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent>
           <DialogTitle>Import NMR spectra</DialogTitle>
@@ -1374,6 +1408,11 @@ export default function SpectraWorkspace({
             Add processed spectra for comparison and analysis.
           </DialogDescription>
           <div className="dialog-body">
+            <RepositoryBrowser
+              mode="nmr"
+              onLoad={importSpectra}
+              onDocumentation={setDocumentation}
+            />
             <div className="data-choice">
               <h3>JCAMP-DX or CSV</h3>
               <p>
