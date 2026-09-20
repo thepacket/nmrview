@@ -1,0 +1,29 @@
+NMRView sample data attribution
+
+MRI volumes mni-t1.nii.gz, mni-t2.nii.gz, mni-gm.nii.gz:
+ICBM 152 Nonlinear Asymmetric 2009c, Montreal Neurological Institute.
+Source: https://www.bic.mni.mcgill.ca/ServicesAtlases/ICBM152NLin2009
+Fonov VS, Evans AC, Botteron K, Almli CR, McKinstry RC, Collins DL, BDCG (2011).
+Unbiased average age-appropriate atlases for pediatric studies. NeuroImage 54.
+https://doi.org/10.1016/j.neuroimage.2010.07.033
+Original NIfTI volumes have been gzip-compressed without resampling or modifying intensities.
+See MNI-COPYING.txt for the original permission notice.
+
+Copyright (C) 1993-2004 Louis Collins, McConnell Brain Imaging Centre,
+Montreal Neurological Institute, McGill University.
+Permission to use, copy, modify, and distribute this software and its
+ documentation for any purpose and without fee is hereby granted,
+provided that the above copyright notice appear in all copies.
+The authors and McGill University make no representations about the
+suitability of this software for any purpose. It is provided "as is"
+without express or implied warranty.
+
+NMR spectra: Menthol.jdx, geraniol_Fig.5.jdx, glucose_dmso_d5_Fig.S5.jdx
+Damien Jeannerat (2021). NMR spectra. Zenodo.
+https://doi.org/10.5281/zenodo.4616665
+License: Creative Commons Attribution 4.0 International (CC BY 4.0).
+https://creativecommons.org/licenses/by/4.0/
+Experimental data accompanying Application of multiplet structure deconvolution
+to extract scalar coupling constants from 1D NMR spectra, Damien Jeannerat and
+Carlos Cobas. Files are unmodified. Display normalization, reference shifts,
+and baseline correction are local viewing operations and do not alter these files.
