@@ -36,15 +36,31 @@ try {
     "dataset",
     signal,
   );
+  assert.deepEqual(result.hits, []);
+  assert.equal(result.next, "2");
+  assert.equal(requests, 1);
+  await searchDatasets("zenodo", "parathyroid", "dataset", signal);
+  assert.equal(requests, 1, "repeat search uses cache");
+  const second = await searchDatasets(
+    "zenodo",
+    "parathyroid",
+    "dataset",
+    signal,
+    "2",
+  );
   assert.deepEqual(
-    result.hits.map((h) => h.id),
+    second.hits.map((h) => h.id),
     ["7"],
   );
-  assert.equal(requests, 2); // Empty incompatible page skipped without user intervention.
-  assert.equal(result.total, undefined); // Never present unfiltered total as compatible count.
+  assert.equal(
+    requests,
+    2,
+    "only an explicit continuation fetches another page",
+  );
+  assert.equal(result.total, undefined);
   globalThis.fetch = async (url) => {
     const u = new URL(String(url));
-    assert.equal(u.searchParams.get("size"), "25");
+    assert.equal(u.searchParams.get("size"), "10");
     const page = Number(u.searchParams.get("page"));
     return Response.json({
       hits: {
@@ -63,31 +79,16 @@ try {
     });
   };
   const deeper = await searchDatasets("zenodo", "knee", "dataset", signal);
-  assert.deepEqual(
-    deeper.hits.map((h) => h.id),
-    ["4"],
-    "continues beyond the old three-page cutoff",
-  );
-  assert.equal(deeper.checked, 4);
-  assert.equal(deeper.excluded?.archives, 3);
+  assert.deepEqual(deeper.hits, []);
+  assert.equal(deeper.next, "2");
+  assert.equal(deeper.checked, 1);
+  assert.equal(deeper.excluded?.archives, 1);
   assert.equal(deeper.catalogTotal, 100);
-  const originalNow = Date.now;
-  let elapsed = 0;
-  Date.now = () => {
-    elapsed += 50000;
-    return elapsed;
-  };
-  try {
-    const bounded = await searchDatasets("zenodo", "femur", "dataset", signal);
-    assert.equal(bounded.checked, 1);
-    assert.equal(
-      bounded.next,
-      "2",
-      "time budget preserves the continuation instead of timing out the whole search",
-    );
-  } finally {
-    Date.now = originalNow;
-  }
+  const fourth = await searchDatasets("zenodo", "knee", "dataset", signal, "4");
+  assert.deepEqual(
+    fourth.hits.map((h) => h.id),
+    ["4"],
+  );
 
   assert.deepEqual(
     await compatibleFiles(
@@ -109,9 +110,27 @@ try {
     [],
   );
   assert.equal(requests, 2); // Obviously incompatible files require no downloads.
+  let throttledRequests = 0;
+  globalThis.fetch = async () => {
+    throttledRequests++;
+    return new Response("", { status: 429 });
+  };
+  await assert.rejects(
+    searchDatasets("zenodo", "throttle", "dataset", signal),
+    /pause requests/,
+  );
+  await assert.rejects(
+    searchDatasets("zenodo", "another", "dataset", signal),
+    /pause requests/,
+  );
+  assert.equal(
+    throttledRequests,
+    1,
+    "search never retries or bypasses cooldown",
+  );
 } finally {
   globalThis.fetch = original;
 }
 console.log(
-  "PASS: incompatible records hidden, compatible records retained, empty pages skipped and oversize archives excluded.",
+  "PASS: incompatible records hidden, compatible records retained, explicit pagination and cached searches and oversize archives excluded.",
 );

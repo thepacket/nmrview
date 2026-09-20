@@ -1,3 +1,4 @@
+import { RepositoryRateLimitError } from "./repository-traffic.ts";
 import {
   downloadPublic,
   supportedFile,
@@ -28,6 +29,7 @@ export async function compatibleFiles(
         accepted.push(...(firstOnly ? volumes.slice(0, 1) : volumes));
         if (firstOnly && volumes.length) break;
       } catch (error) {
+        if (error instanceof RepositoryRateLimitError) throw error;
         signal.throwIfAborted();
         archiveFailure = error;
       }
@@ -69,7 +71,8 @@ export async function compatibleFiles(
           }
         }
         if (file.url) remember(key, valid);
-      } catch {
+      } catch (error) {
+        if (error instanceof RepositoryRateLimitError) throw error;
         signal.throwIfAborted();
         // Network failures are not cached as permanent incompatibility.
         valid = false;

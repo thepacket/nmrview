@@ -1,3 +1,4 @@
+import { RepositoryRateLimitError } from "./repository-traffic.ts";
 import {
   downloadPublic,
   browseRepository,
@@ -74,7 +75,7 @@ export async function searchPage(
       throw new Error("Invalid search page.");
     const query = new URLSearchParams({
       q: zenodoSearchQuery(term, filter === "dataset"),
-      size: mode === "mri" ? "25" : "10",
+      size: "10",
       page: String(page),
       sort: term.trim() ? "bestmatch" : "mostrecent",
     });
@@ -204,7 +205,7 @@ export async function searchPage(
   };
 }
 
-export async function searchDatasets(
+async function searchUncached(
   provider: string,
   term: string,
   filter: string,
@@ -215,16 +216,11 @@ export async function searchDatasets(
   const { compatibleFiles } = await import("./repository-compatibility.ts");
   let next = cursor;
   const budget = { remaining: 128 * 1024 * 1024 };
-  const deadline = Date.now() + 45000;
   let checked = 0;
   let catalogTotal: number | undefined;
   const excluded = { archives: 0, unsupported: 0, oversized: 0, unchecked: 0 };
-  // Skip empty catalog pages automatically, but bound each user request.
-  for (
-    let page = 0;
-    page < (provider === "zenodo" && mode === "mri" ? 10 : 3);
-    page++
-  ) {
+  // One catalog page per explicit user request.
+  for (let page = 0; page < 1; page++) {
     const result = await searchPage(provider, term, filter, signal, next, mode);
     checked += result.hits.length;
     catalogTotal = result.total;
@@ -233,7 +229,7 @@ export async function searchDatasets(
     const outcomes: boolean[] = [];
     const failed = new Set<number>();
     await Promise.all(
-      Array.from({ length: Math.min(3, result.hits.length) }, async () => {
+      Array.from({ length: Math.min(1, result.hits.length) }, async () => {
         while (index < result.hits.length) {
           const i = index++,
             hit = result.hits[i];
@@ -256,7 +252,7 @@ export async function searchDatasets(
                 ).length > 0;
             else {
               let token: string | undefined;
-              for (let p = 0; p < 3; p++) {
+              for (let p = 0; p < 1; p++) {
                 const record = await browseRepository(
                   provider,
                   hit.id,
@@ -275,7 +271,8 @@ export async function searchDatasets(
                 if (!token) break;
               }
             }
-          } catch {
+          } catch (error) {
+            if (error instanceof RepositoryRateLimitError) throw error;
             excluded.unchecked++;
             failed.add(i);
             signal.throwIfAborted();
@@ -317,8 +314,39 @@ export async function searchDatasets(
         });
     });
     next = result.next;
-    if (hits.length || !next || Date.now() >= deadline)
-      return { hits, next, checked, excluded, catalogTotal };
+    return { hits, next, checked, excluded, catalogTotal };
   }
   return { hits: [], next, checked, excluded, catalogTotal };
+}
+
+// Cache completed discovery only; errors and cancelled runs remain retryable.
+const discoveries = new Map<string, { at: number; result: DatasetResults }>();
+export async function searchDatasets(
+  provider: string,
+  term: string,
+  filter: string,
+  signal: AbortSignal,
+  cursor?: string,
+  mode: "mri" | "nmr" = "mri",
+): Promise<DatasetResults> {
+  signal.throwIfAborted();
+  const key = JSON.stringify([provider, term.trim(), filter, cursor, mode]);
+  const saved = discoveries.get(key);
+  if (saved && Date.now() - saved.at < 300000)
+    return structuredClone(saved.result);
+  const result = await searchUncached(
+    provider,
+    term,
+    filter,
+    signal,
+    cursor,
+    mode,
+  );
+  signal.throwIfAborted();
+  if (!result.excluded?.unchecked) {
+    if (discoveries.size >= 20)
+      discoveries.delete(discoveries.keys().next().value!);
+    discoveries.set(key, { at: Date.now(), result: structuredClone(result) });
+  }
+  return result;
 }

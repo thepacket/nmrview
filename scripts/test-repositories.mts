@@ -64,7 +64,7 @@ try {
   globalThis.fetch = async () => new Response("", { status: 429 });
   await assert.rejects(
     downloadPublic("https://zenodo.org/file", 5, new AbortController().signal),
-    /429/,
+    /pause requests.*60 seconds/,
   );
 } finally {
   globalThis.fetch = originalFetch;

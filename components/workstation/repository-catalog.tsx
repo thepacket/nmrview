@@ -87,6 +87,11 @@ export function RepositoryCatalog({
     <div className="repository-catalog">
       <h4>Discover datasets</h4>
       <p className="hint">
+        Each search checks one page of up to 10 records. Use Find more to
+        continue. Requests are paced, and completed results are reused for five
+        minutes.
+      </p>
+      <p className="hint">
         Search{" "}
         {provider === "openneuro"
           ? "public MRI datasets on OpenNeuro"

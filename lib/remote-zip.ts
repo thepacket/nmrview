@@ -1,3 +1,4 @@
+import { repositoryTraffic } from "./repository-traffic.ts";
 import type { RepositoryFile } from "./repositories.ts";
 const MiB = 1024 * 1024;
 const MAX_DIRECTORY = 8 * MiB;
@@ -40,7 +41,7 @@ async function range(
   )
     throw new Error("Invalid archive byte range.");
   signal.throwIfAborted();
-  const response = await fetch(address(url), {
+  const response = await repositoryTraffic.fetch(address(url), {
     signal,
     credentials: "omit",
     referrerPolicy: "no-referrer",

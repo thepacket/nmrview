@@ -1,3 +1,4 @@
+import { repositoryTraffic } from "./repository-traffic.ts";
 export type RepositoryFile = {
   name: string;
   size: number;
@@ -76,7 +77,7 @@ export async function downloadPublic(
     const { downloadZipVolume } = await import("./remote-zip.ts");
     return downloadZipVolume(url, limit, signal, progress);
   }
-  const response = await fetch(u, {
+  const response = await repositoryTraffic.fetch(u, {
     signal,
     credentials: "omit",
     ...(u.hostname === "openneuro.org"
