@@ -47,6 +47,8 @@ import {
 import { ScanViewController, type ViewMode } from "@/lib/viewer-state";
 import type { RepositoryFile } from "@/lib/repositories";
 import { CollectionLibrary } from "./collection-library";
+import { ScanAnnotations } from "./scan-annotations";
+import { annotationSource } from "@/lib/annotations";
 import { StudyComparison } from "./study-comparison";
 import {
   COLLECTION_STORAGE_KEY,
@@ -181,7 +183,7 @@ export default function MRIWorkspace({
     [zoom, setZoom] = useState(1),
     [gamma, setGamma] = useState(1),
     [expanded, setExpanded] = useState(false),
-    [nearest, setNearest] = useState(false),
+    [nearest, setNearest] = useState(true),
     [clip, setClip] = useState(2),
     [pos, setPos] = useState<number[]>([0.5, 0.5, 0.5]),
     [mm, setMM] = useState<number[]>([0, 0, 0]),
@@ -250,6 +252,7 @@ export default function MRIWorkspace({
         const { Niivue } = await import("@niivue/niivue");
         if (cancelled || !canvas.current) return;
         instance = new Niivue({
+          isNearestInterpolation: true,
           backColor: [0.03, 0.045, 0.06, 1],
           crosshairColor: [1, 0.85, 0.05, 1],
           show3Dcrosshair: true,
@@ -263,6 +266,7 @@ export default function MRIWorkspace({
           multiplanarShowRender: 1,
           multiplanarLayout: 0,
           dragAndDropEnabled: false,
+          maxDrawUndoBitmaps: 8,
           isRadiologicalConvention: false,
         });
         // NiiVue renders occluded cursor segments at 15% opacity. Keep the
@@ -569,7 +573,10 @@ export default function MRIWorkspace({
       mainScan.current = null;
       setCaseContext(null);
       if (sample || replaceStudy) {
+        const drawingCallback = n.onDrawingChanged;
+        n.onDrawingChanged = () => {};
         n.closeDrawing();
+        n.onDrawingChanged = drawingCallback;
         n.clearAllMeasurements();
         setMeasurements([]);
         for (const v of [...n.volumes]) n.removeVolume(v);
@@ -897,7 +904,10 @@ export default function MRIWorkspace({
                       n.removeVolumeByIndex(i);
                       if (i === 0) {
                         n.clearAllMeasurements();
+                        const drawingCallback = n.onDrawingChanged;
+                        n.onDrawingChanged = () => {};
                         n.closeDrawing();
+                        n.onDrawingChanged = drawingCallback;
                         setMeasurements([]);
                       }
                       sync();
@@ -980,7 +990,10 @@ export default function MRIWorkspace({
                 ]);
                 mainScan.current = null;
                 setCaseContext(null);
+                const drawingCallback = n.onDrawingChanged;
+                n.onDrawingChanged = () => {};
                 n.closeDrawing();
+                n.onDrawingChanged = drawingCallback;
                 n.clearAllMeasurements();
                 setMeasurements([]);
                 setSample(true);
@@ -1461,117 +1474,130 @@ export default function MRIWorkspace({
             }}
           />
         </div>
-        <div className="panel-section">
-          <p className="eyebrow">Measurements & labels</p>
-          <p className="hint">
-            Distance: drag between two points. Angle: draw two connected lines.
-            Results use physical millimetres from the image header.
-          </p>
-          {measurements.map((m, i) => (
-            <div className="annotation" key={i}>
-              <Ruler size={14} />
-              <span>
-                {"distance" in m
-                  ? `${m.distance.toFixed(2)} mm`
-                  : `${m.angle.toFixed(1)}°`}
-              </span>
-              <button
-                className="btn small ghost"
-                onClick={() => {
-                  const n = nv.current;
-                  if (n) {
-                    n.scene.crosshairPos = Array.from(
-                      n.mm2frac(
-                        "distance" in m ? m.startMM : m.firstLineMM.start,
-                      ),
-                    ) as [number, number, number];
-                    n.setSliceType(m.sliceType);
-                    setLayout(String(m.sliceType));
-                    n.drawScene();
-                    setPos(Array.from(n.scene.crosshairPos));
+        {caseContext ? (
+          <div className="panel-section">
+            <ScanAnnotations
+              getViewer={() => nv.current}
+              ready={ready}
+              source={annotationSource(caseContext.source)}
+              name={caseContext.source.name}
+              active={!comparing && active}
+              onLocate={(slice) => setLayout(String(slice))}
+            />
+          </div>
+        ) : (
+          <div className="panel-section">
+            <p className="eyebrow">Measurements & labels</p>
+            <p className="hint">
+              Distance: drag between two points. Angle: draw two connected
+              lines. Results use physical millimetres from the image header.
+            </p>
+            {measurements.map((m, i) => (
+              <div className="annotation" key={i}>
+                <Ruler size={14} />
+                <span>
+                  {"distance" in m
+                    ? `${m.distance.toFixed(2)} mm`
+                    : `${m.angle.toFixed(1)}°`}
+                </span>
+                <button
+                  className="btn small ghost"
+                  onClick={() => {
+                    const n = nv.current;
+                    if (n) {
+                      n.scene.crosshairPos = Array.from(
+                        n.mm2frac(
+                          "distance" in m ? m.startMM : m.firstLineMM.start,
+                        ),
+                      ) as [number, number, number];
+                      n.setSliceType(m.sliceType);
+                      setLayout(String(m.sliceType));
+                      n.drawScene();
+                      setPos(Array.from(n.scene.crosshairPos));
+                    }
+                  }}
+                >
+                  Locate
+                </button>
+              </div>
+            ))}
+            {measurements.length > 0 && (
+              <div className="full-row" style={{ marginTop: 10 }}>
+                <button
+                  className="btn small"
+                  onClick={() =>
+                    downloadBlob(
+                      JSON.stringify(measurements, null, 2),
+                      "nmrview-measurements.json",
+                    )
                   }
-                }}
-              >
-                Locate
-              </button>
+                >
+                  <FileDown />
+                  Export
+                </button>
+                <button
+                  className="btn small"
+                  onClick={() => {
+                    nv.current?.clearAllMeasurements();
+                    setMeasurements([]);
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+            <div className="control">
+              <label>Drawing label</label>
+              <Choice
+                label="Drawing label"
+                value={pen}
+                options={[
+                  ["1", "1 · Red"],
+                  ["2", "2 · Green"],
+                  ["3", "3 · Blue"],
+                  ["4", "4 · Yellow"],
+                ]}
+                onChange={setPen}
+              />
             </div>
-          ))}
-          {measurements.length > 0 && (
-            <div className="full-row" style={{ marginTop: 10 }}>
+            <Range
+              label="Label opacity"
+              value={drawOpacity * 100}
+              unit="%"
+              onChange={(v) => {
+                setDrawOpacity(v / 100);
+                nv.current?.setDrawOpacity(v / 100);
+              }}
+            />
+            <div className="full-row">
+              <button
+                className="btn small"
+                title="Undo drawing"
+                onClick={() => nv.current?.drawUndo()}
+              >
+                <Undo2 />
+                Undo
+              </button>
               <button
                 className="btn small"
                 onClick={() =>
-                  downloadBlob(
-                    JSON.stringify(measurements, null, 2),
-                    "nmrview-measurements.json",
-                  )
+                  run("Exporting label map…", async () => {
+                    if (!nv.current?.drawBitmap)
+                      throw new Error("Draw a label on a slice first.");
+                    await nv.current.saveImage({
+                      filename: "nmrview-labels.nii.gz",
+                      isSaveDrawing: true,
+                      volumeByIndex: 0,
+                    });
+                  })
                 }
               >
-                <FileDown />
-                Export
-              </button>
-              <button
-                className="btn small"
-                onClick={() => {
-                  nv.current?.clearAllMeasurements();
-                  setMeasurements([]);
-                }}
-              >
-                Clear
+                <Download />
+                Labels
               </button>
             </div>
-          )}
-          <div className="control">
-            <label>Drawing label</label>
-            <Choice
-              label="Drawing label"
-              value={pen}
-              options={[
-                ["1", "1 · Red"],
-                ["2", "2 · Green"],
-                ["3", "3 · Blue"],
-                ["4", "4 · Yellow"],
-              ]}
-              onChange={setPen}
-            />
           </div>
-          <Range
-            label="Label opacity"
-            value={drawOpacity * 100}
-            unit="%"
-            onChange={(v) => {
-              setDrawOpacity(v / 100);
-              nv.current?.setDrawOpacity(v / 100);
-            }}
-          />
-          <div className="full-row">
-            <button
-              className="btn small"
-              title="Undo drawing"
-              onClick={() => nv.current?.drawUndo()}
-            >
-              <Undo2 />
-              Undo
-            </button>
-            <button
-              className="btn small"
-              onClick={() =>
-                run("Exporting label map…", async () => {
-                  if (!nv.current?.drawBitmap)
-                    throw new Error("Draw a label on a slice first.");
-                  await nv.current.saveImage({
-                    filename: "nmrview-labels.nii.gz",
-                    isSaveDrawing: true,
-                    volumeByIndex: 0,
-                  });
-                })
-              }
-            >
-              <Download />
-              Labels
-            </button>
-          </div>
-        </div>
+        )}
         {selectedLayer && (
           <div className="panel-section">
             <p className="eyebrow">Acquisition metadata</p>

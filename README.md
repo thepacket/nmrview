@@ -99,7 +99,7 @@ Comparison loading has per-pane cancellation/retry, a five-minute deadline, earl
 
 Main and comparison views now use the same scan-view controller. **Fit image** keeps the complete reference volume fitted as controls open or the viewport resizes. Panning or changing the zoom enters **Manual zoom**; resizing preserves the 2D display scale in CSS pixels per millimetre and the physical pan coordinates. Fit does not change contrast, slice position, measurements or labels. Restore images remains the stronger recovery action. Pure 3D views retain NiiVue's camera behavior; physical scale preservation applies to slice views.
 
-Comparison controls are docked rather than covering the images. Each participant has immediately available Fit, Open in main viewer and Expand actions. Opening a comparison scan in the main viewer carries its contrast, cursor, 4D frame and fit/manual state across. Main-view changes return to comparison through the saved collection. Returning to the same already-loaded main scan reuses it, preserving its measurements and labels; opening a different scan still replaces the main study. Comparison panes do not yet display main-view annotations.
+Comparison controls are docked rather than covering the images. Each participant has immediately available Fit, Open in main viewer and Expand actions. Opening a comparison scan in the main viewer carries its contrast, cursor, 4D frame and fit/manual state across. Main-view changes return to comparison through the saved collection. Returning to the same already-loaded main scan reuses it, preserving its measurements and labels; opening a different scan still replaces the main study. Repository scan annotations now follow the scan between both views (see below).
 
 **Collections** opens a browser-local library of up to 30 named snapshots. Save, open, rename, delete and export snapshots independently of the current collection's autosave. Snapshots include participant selections, scan choices, documentation and viewing state, not image bytes or main-view annotations. Later edits update the current collection, not existing named snapshots. Save a new snapshot to preserve a later arrangement. Exports remain available if browser storage fills. Repository files must remain accessible; OpenNeuro sources still use the latest mirror rather than pinned historical versions.
 
@@ -112,3 +112,45 @@ In the comparison workspace, **Arrange scans → Participants / Sequences / Visi
 A comparison can now contain multiple scans from one study. Each pane has its own scan identity, display state and frame controls. Arrangements survive current-collection autosave and named snapshot export/import. Relative cursor linking identifies each pane independently, including panes belonging to the same participant; it does not register scans. Presets start with independent navigation.
 
 **Acquisition differences** shows a docked side-by-side table of reported scanner, field strength, timing, flip angle and other acquisition properties. It uses inherited OpenNeuro JSON metadata, highlights differing reported values and distinguishes loading, unavailable and unreported data. Source links and field provenance are retained. Zenodo acquisitions without this metadata remain explicitly unavailable. This is a review aid, not proof of equivalent acquisition parameters or anatomical alignment.
+
+## Comparison loading and scan memory
+
+Comparison panes share a session-only LRU cache of prepared files, capped at 192 MB. Revisiting an available scan avoids another application download and gzip expansion; each renderer still parses its own independent volume. Cached sources expire after 15 minutes and are never written to browser storage. URL, filename, listed size and local blob identity distinguish sources; this is not historical version pinning. Scans larger than the cache budget remain viewable within the existing comparison limits but are not retained in this cache.
+
+At most two downloads/preparations run concurrently. Additional requests show a queued state. Concurrent requests for the same scan share the work; cancelling one pane only cancels the underlying job when its last consumer leaves. Failed loads can retry, and Retry discards that scan's cached file first. Comparison tools show retained bytes, queued/active jobs and reuse counts. Clear scan cache releases retained files without unloading displayed scans; loads already running finish for their viewers but do not repopulate the cleared cache. Image parser allocations, active volumes, GPU textures and the browser HTTP cache are additional memory, not included in the 192 MB cap.
+
+`node --experimental-strip-types scripts/test-scan-cache.mts` covers eviction, oversize handling, concurrency, shared-request cancellation, clear during loading, retry and expiry.
+
+## Scan geometry review
+
+Comparison → **Scan geometry** inspects the loaded renderer's RAS-ordered voxel grid, reporting dimensions, voxel spacing, field of view and the first voxel centre. Differences in grid orientation and origin are checked separately from spacing and dimensions. Declared metres and micrometres are normalized to millimetres; unspecified units, invalid dimensions and degenerate transforms are explicitly unverified. Values come from the image geometry, independently of acquisition JSON sidecars. The comparison controls summarize whether selected grids differ or are still pending.
+
+Comparison tolerances are 0.01 mm for spacing, 0.1 mm for field of view/origin and 0.001 for direction components. Field of view is the length along each grid axis including full voxel widths, not an axis-aligned anatomical bounding box. Matching grids do not prove registration, common subject coordinates or acquisition equivalence. Cursor linking remains relative volume position; no automatic registration or resampling is performed. Geometry reports are computed after loading and are not persisted in saved collections.
+
+Comparison additionally caps retained decoded voxel arrays at **384 MB across all panes** (256 MB per scan). Image parsing runs one scan at a time, including cache hits. A scan that would exceed the aggregate budget is not attached to a renderer; close another scan and retry. **Close scan** removes a single pane, including a single sequence within a participant, and releases its renderer and decoded-data reservation. Comparison tools show active decoded bytes separately from cached files. Cancellation, replacement, load failures and leaving comparison also release reservations.
+
+This limits retained voxel arrays, not total process memory: one parser's temporary allocations, GPU textures, prepared files, browser overhead and the main viewer are additional. Non-NIfTI decoders can allocate before their output size is known. This is not a guarantee against device memory exhaustion. `scripts/test-comparison-memory.mts` checks aggregate limits, release, parser scheduling, cancellation and recovery.
+
+## Shared scan annotations and segmentation
+
+For a repository scan, open **Annotations** on its comparison pane, or **Controls → Scan annotations** in the main viewer. Distance and angle tools record physical coordinates and the current time frame. Rename, locate or delete each measurement; Locate restores its frame, plane and position. Draw/erase labels on slice views, rename regions, undo strokes and keep scan notes. Label maps cover the spatial volume and are shared across time frames. This is manual segmentation; no automatic tissue or lesion segmentation is performed.
+
+Measurements, region names, notes and label maps follow the same repository scan between main and comparison views. They autosave separately in IndexedDB and survive a reload. Collection snapshots contain viewing arrangements, not annotation copies. Imported local volumes and the built-in atlas retain the existing MRI `.nvd` session workflow. Autosave is browser-local, not multi-user or cross-tab collaboration: edit a scan in one browser tab at a time. Storage failure is reported; export before leaving if saving fails. An unreadable existing record is not overwritten.
+
+**Export annotations** produces an `.nmra` package containing measurements, notes, label names and raw label voxels without the source MRI. **Import annotations** replaces the current scan's annotation record only when source identity, geometry, dimensions and frame count agree. **Measurement report** exports formatted JSON including physical coordinates, frames, scan identity and region definitions; **NIfTI labels** exports the label map for other imaging tools. Packages are bounded to 64 MB of label voxels plus 2 MB of metadata. Retained annotation label buffers are capped at 128 MB; renderer copies and pending storage writes add memory. Eight native undo states are kept per viewer; undo history is not exported or restored across viewers.
+
+Identity uses repository URL, filename, listed size and the loaded geometry/data type/frame count. It is not a content hash or a pinned dataset version: changed data at the same URL with the same identity may require separate handling. Annotations are never registered or transferred onto a different participant automatically. Physical measurement accuracy depends on acquisition geometry and units.
+
+Regression scripts `test-annotations.mts`, `test-annotation-store.mts` and `test-annotation-viewer.mts` cover package validation, scan mismatch, frame isolation, storage recovery, shared records, independent renderer buffers, callback cleanup, replaced-volume protection and memory limits.
+
+## Evolution phases
+
+1. Predictable image fitting, shared viewing state and docked controls.
+2. Participant/session organization, case documentation and named collection snapshots.
+3. Guided participant, sequence and visit comparisons, with acquisition review.
+4. Bounded concurrent loading, reusable prepared scans, cancellation/retry, decoded-memory accounting and geometry review.
+5. Shared repository-scan measurements, manual labels, browser persistence and portable annotation/report exports.
+
+These phases describe the implemented workstation scope. Automatic registration, automated segmentation, PACS integration, multi-user collaboration and clinical validation remain outside this release. Physical-device mobile performance profiling remains outstanding.
+
+Browser QA for phases 4–5 used OpenNeuro ds000228 anatomical and functional scans: both rendered after reopening the browser, a drawn distance and label map followed the scan into the main viewer and survived a full page reload, and test annotations were removed afterward. A narrow viewport exposed overlapping comparison rows with annotations open; rows now accommodate the complete pane. Package serialization/import is regression-tested; the embedded browser's download-event API did not confirm the native save operation. Browser checks do not replace physical mobile-device testing.

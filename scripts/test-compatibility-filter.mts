@@ -42,6 +42,35 @@ try {
   );
   assert.equal(requests, 2); // Empty incompatible page skipped without user intervention.
   assert.equal(result.total, undefined); // Never present unfiltered total as compatible count.
+  globalThis.fetch = async (url) => {
+    const u = new URL(String(url));
+    assert.equal(u.searchParams.get("size"), "25");
+    const page = Number(u.searchParams.get("page"));
+    return Response.json({
+      hits: {
+        total: 100,
+        hits: [
+          {
+            id: page,
+            metadata: { access_right: "open", title: "Knee imaging" },
+            files: [
+              { key: page === 4 ? "knee.nii.gz" : "images.zip", size: 100 },
+            ],
+          },
+        ],
+      },
+      links: page < 4 ? { next: "next" } : {},
+    });
+  };
+  const deeper = await searchDatasets("zenodo", "knee", "dataset", signal);
+  assert.deepEqual(
+    deeper.hits.map((h) => h.id),
+    ["4"],
+    "continues beyond the old three-page cutoff",
+  );
+  assert.equal(deeper.checked, 4);
+  assert.equal(deeper.excluded?.archives, 3);
+  assert.equal(deeper.catalogTotal, 100);
   assert.deepEqual(
     await compatibleFiles(
       [

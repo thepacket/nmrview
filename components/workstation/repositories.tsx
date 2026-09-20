@@ -37,6 +37,9 @@ export function RepositoryBrowser({
   const [provider, setProvider] = useState(
     mode === "mri" ? "openneuro" : "zenodo",
   );
+  const [catalogTerm, setCatalogTerm] = useState(
+    mode === "mri" ? "brain" : "NMR",
+  );
   const [input, setInput] = useState(mode === "mri" ? "ds000228" : "4616665");
   const [record, setRecord] = useState<RepositoryRecord | null>(null);
   const [query, setQuery] = useState("");
@@ -277,6 +280,8 @@ export function RepositoryBrowser({
       />
       <RepositoryCatalog
         key={provider}
+        term={catalogTerm}
+        onTermChange={setCatalogTerm}
         provider={provider}
         mode={mode}
         disabled={!!busy}

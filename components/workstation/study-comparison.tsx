@@ -1,10 +1,25 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { ScanViewController, type ViewMode } from "@/lib/viewer-state";
 import type { Niivue } from "@niivue/niivue";
-import { downloadPublic, type RepositoryFile } from "@/lib/repositories";
+import { type RepositoryFile } from "@/lib/repositories";
 import type { Study, StudyCollection } from "@/lib/study-collection";
 import { ComparisonPlanner } from "./comparison-planner";
+import { ScanAnnotations } from "./scan-annotations";
+import { annotationSource } from "@/lib/annotations";
+import { comparisonMemory } from "@/lib/comparison-memory";
+import { GeometryComparison } from "./geometry-comparison";
+import {
+  scanGeometry,
+  compareGeometry,
+  type ScanGeometry,
+} from "@/lib/scan-geometry";
 import { AcquisitionComparison } from "./acquisition-comparison";
 import type {
   ComparisonKind,
@@ -12,7 +27,11 @@ import type {
 } from "@/lib/comparison-plan";
 import { scanDescriptor, matchingScan } from "@/lib/scan-selection";
 import { ScanPicker } from "./scan-picker";
-import { prepareComparisonFile } from "@/lib/comparison-download";
+import {
+  loadComparisonScan,
+  forgetComparisonScan,
+} from "@/lib/load-comparison-scan";
+import { comparisonScanCache } from "@/lib/scan-cache";
 import { CaseNotes } from "./case-documentation";
 import { Choice, downloadBlob } from "./controls";
 import {
@@ -38,6 +57,16 @@ export function StudyComparison({
     source: RepositoryFile,
   ) => Promise<void>;
 }) {
+  const cache = useSyncExternalStore(
+    comparisonScanCache.subscribe,
+    comparisonScanCache.getSnapshot,
+    comparisonScanCache.getSnapshot,
+  );
+  const memory = useSyncExternalStore(
+    comparisonMemory.subscribe,
+    comparisonMemory.getSnapshot,
+    comparisonMemory.getSnapshot,
+  );
   const [saved] = useState(() => {
     try {
       const s = readSavedCollection();
@@ -62,6 +91,10 @@ export function StudyComparison({
   >(saved?.arrangement);
   const [planning, setPlanning] = useState<ComparisonKind | null>(null);
   const [showAcquisition, setShowAcquisition] = useState(false);
+  const [showGeometry, setShowGeometry] = useState(false);
+  const [geometries, setGeometries] = useState<
+    Record<string, ScanGeometry | undefined>
+  >({});
   const slots =
     arrangement?.slots ||
     selected.map((studyId) => {
@@ -74,6 +107,18 @@ export function StudyComparison({
       .find((s) => s.id === slot.studyId)!
       .files.find((f) => f.name === slot.fileName)!,
   }));
+  const gridChecks = slots.map(
+    (slot) => geometries[paneViewKey(slot.studyId, slot.fileName)],
+  );
+  const geometrySummary = gridChecks.some((g) => !g)
+    ? "Geometry check pending: load all selected scans."
+    : gridChecks.some((g) => g!.issues.length)
+      ? "Some scan geometry is unverified. Review Scan geometry before comparing physical measurements."
+      : gridChecks
+            .slice(1)
+            .some((g) => compareGeometry(gridChecks[0]!, g!).length)
+        ? "Different image grids: relative linking does not follow the same anatomical location."
+        : "Matching image grids do not establish anatomical alignment.";
   function selectParticipants(
     update: string[] | ((ids: string[]) => string[]),
   ) {
@@ -270,6 +315,13 @@ export function StudyComparison({
         >
           Acquisition differences
         </button>
+        <button
+          className="btn small"
+          aria-expanded={showGeometry}
+          onClick={() => setShowGeometry((v) => !v)}
+        >
+          Scan geometry
+        </button>
         <span className="comparison-summary">
           {slots.length} scans · {arrangement?.kind || "participants"} ·{" "}
           {linked ? "Relative slice linking" : "Independent navigation"}
@@ -347,7 +399,7 @@ export function StudyComparison({
               />
               Link relative slice position
             </label>
-            <span>Participants are not automatically registered.</span>
+            <span>{geometrySummary}</span>
             <button
               className="btn small"
               disabled={selected.length < 2 || !!arrangement}
@@ -355,8 +407,40 @@ export function StudyComparison({
             >
               Match scans to first participant
             </button>
+            <div className="scan-cache-controls">
+              <span role="status">
+                Scan memory: {cache.files} files ·{" "}
+                {(cache.bytes / 1048576).toFixed(0)} / 192 MB · {cache.active}{" "}
+                loading · {cache.queued} queued · {cache.hits} reused
+              </span>
+              <button
+                className="btn small"
+                onClick={() => comparisonScanCache.clear()}
+              >
+                Clear scan cache
+              </button>
+              <small>
+                Reuses prepared scans for up to 15 minutes in this tab. Clearing
+                keeps displayed images; reopen a scan to fetch it again.
+                Renderer memory is additional.
+              </small>
+            </div>
+            <span role="status">
+              Active voxel data: {(memory.bytes / 1048576).toFixed(0)} / 384 MB
+              · {memory.volumes} scans ·{" "}
+              {memory.parsing ? "1 parsing" : "Parser idle"} · {memory.queued}{" "}
+              waiting to open
+            </span>
             {matchStatus && <p role="status">{matchStatus}</p>}
           </div>
+          {showGeometry && (
+            <GeometryComparison
+              scans={displayedScans.map(({ study, file }) => ({
+                label: `${study.participant} ${study.session} · ${file.name.split("/").at(-1)}`,
+                geometry: geometries[paneViewKey(study.id, file.name)],
+              }))}
+            />
+          )}
           {showAcquisition && slots.length > 0 && (
             <AcquisitionComparison scans={displayedScans} />
           )}
@@ -390,6 +474,28 @@ export function StudyComparison({
                 const slotId = paneViewKey(id, f.name);
                 return (
                   <ComparisonPane
+                    onRemove={() => {
+                      const remaining = slots.filter((value) => value !== slot);
+                      setArrangement(
+                        remaining.length
+                          ? {
+                              kind: arrangement?.kind || "participants",
+                              slots: remaining,
+                            }
+                          : undefined,
+                      );
+                      setSelected([
+                        ...new Set(remaining.map((value) => value.studyId)),
+                      ]);
+                      setFocused(null);
+                      setLocation(null);
+                    }}
+                    onGeometry={(geometry) =>
+                      setGeometries((current) => ({
+                        ...current,
+                        [slotId]: geometry,
+                      }))
+                    }
                     focused={focused === slotId}
                     onFocus={() =>
                       setFocused(focused === slotId ? null : slotId)
@@ -408,6 +514,7 @@ export function StudyComparison({
                     }
                     study={s}
                     file={f}
+                    onAnnotationLocate={(slice) => setLayout(String(slice))}
                     layout={layout}
                     location={linked ? location : null}
                     onLocation={(frac) => setLocation({ from: slotId, frac })}
@@ -452,6 +559,9 @@ export function StudyComparison({
   );
 }
 function ComparisonPane({
+  onAnnotationLocate,
+  onRemove,
+  onGeometry,
   slotId,
   focused,
   onFocus,
@@ -466,6 +576,9 @@ function ComparisonPane({
   onNotes,
   onOpen,
 }: {
+  onAnnotationLocate: (slice: number) => void;
+  onRemove: () => void;
+  onGeometry: (geometry: ScanGeometry | undefined) => void;
   slotId: string;
   focused: boolean;
   onFocus: () => void;
@@ -486,6 +599,7 @@ function ComparisonPane({
   ) => Promise<void>;
 }) {
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [annotationsOpen, setAnnotationsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("fit");
   const controller = useRef<ScanViewController | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null),
@@ -494,6 +608,8 @@ function ComparisonPane({
     locationHandler = useRef(onLocation),
     applying = useRef(false);
   locationHandler.current = onLocation;
+  const geometryHandler = useRef(onGeometry);
+  geometryHandler.current = onGeometry;
   const viewHandler = useRef(onView);
   viewHandler.current = onView;
   const initial = useRef(initialView);
@@ -516,8 +632,9 @@ function ComparisonPane({
       abort.signal,
       AbortSignal.timeout(5 * 60 * 1000),
     ]);
-    let lastProgress = 0;
     let n: Niivue | undefined;
+    let releaseMemory: (() => void) | undefined;
+    geometryHandler.current(undefined);
     setReady(false);
     setFrames(1);
     setFrame(0);
@@ -526,53 +643,70 @@ function ComparisonPane({
     local.current = null;
     (async () => {
       try {
-        if (file.size > 128 * 1024 * 1024)
-          throw new Error(
-            "This scan exceeds the 128 MB comparison download limit. Choose a smaller scan or use the main viewer.",
-          );
         const { Niivue, NVImage } = await import("@niivue/niivue");
         signal.throwIfAborted();
-        const blob =
-          file.blob ||
-          (await downloadPublic(
-            file.url!,
-            128 * 1024 * 1024,
-            signal,
-            (bytes, total) => {
-              if (!signal.aborted && performance.now() - lastProgress > 100) {
-                lastProgress = performance.now();
-                setStatus(
-                  `Loading ${(bytes / 1048576).toFixed(1)}${total ? ` / ${(total / 1048576).toFixed(1)}` : ""} MB`,
-                );
-              }
-            },
-          ));
-        if (abort.signal.aborted) return;
-        const scan = new File([blob], file.name.split("/").at(-1)!);
-        setStatus("Preparing image…");
-        const prepared = await prepareComparisonFile(blob, scan.name, signal);
+        const prepared = await loadComparisonScan(file, signal, (message) => {
+          if (!signal.aborted) setStatus(message);
+        });
         signal.throwIfAborted();
-        const image = await NVImage.loadFromFile({ file: prepared });
+        setStatus("Waiting to open image…");
+        const image = await comparisonMemory.parse(signal, async () => {
+          setStatus("Opening image…");
+          const image = await NVImage.loadFromFile({ file: prepared });
+          signal.throwIfAborted();
+          if (!image.img) throw new Error("The scan contains no image data.");
+          if (image.img.byteLength > 256 * 1024 * 1024)
+            throw new Error(
+              "This scan exceeds the comparison memory limit. Use the main viewer for large volumes.",
+            );
+          releaseMemory = comparisonMemory.reserve(image.img.byteLength);
+          return image;
+        });
         signal.throwIfAborted();
-        if (!image.img) throw new Error("The scan contains no image data.");
-        if (image.img.byteLength > 256 * 1024 * 1024)
-          throw new Error(
-            "This scan exceeds the comparison memory limit. Use the main viewer for large volumes.",
-          );
+        setStatus("Initializing graphics…");
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+        signal.throwIfAborted();
         n = new Niivue({
+          isNearestInterpolation: true,
           backColor: [0.03, 0.045, 0.06, 1],
           crosshairColor: [1, 0.85, 0.05, 1],
           crosshairWidth: 0.5,
           crosshairWidthUnit: "percent",
           dragAndDropEnabled: false,
+          maxDrawUndoBitmaps: 8,
           multiplanarShowRender: 0,
         });
         await n.attachToCanvas(canvas.current!);
         if (abort.signal.aborted) {
           n.cleanup();
+          releaseMemory?.();
           return;
         }
+        setStatus("Uploading image to graphics device…");
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => resolve()),
+        );
+        signal.throwIfAborted();
         n.addVolume(image);
+        const points = image.matRAS
+          ? [
+              [0, 0, 0],
+              [1, 0, 0],
+              [0, 1, 0],
+              [0, 0, 1],
+            ].map((point) =>
+              Array.from(image.vox2mm(point, image.matRAS!)).slice(0, 3),
+            )
+          : [];
+        geometryHandler.current(
+          scanGeometry(
+            image.dimsRAS?.slice(1, 4) || [],
+            points,
+            image.hdr?.xyzt_units || 0,
+          ),
+        );
         n.setSliceType(Number(layout));
         n.onLocationChange = (value) => {
           const frac = (value as { frac?: number[] }).frac;
@@ -580,7 +714,7 @@ function ComparisonPane({
             locationHandler.current(Array.from(frac).slice(0, 3));
         };
         viewer.current = n;
-        local.current = scan;
+        local.current = prepared;
         controller.current = new ScanViewController(n, (view) => {
           setZoom(view.pan[3]);
           setViewMode(view.mode || "fit");
@@ -598,6 +732,7 @@ function ComparisonPane({
       } catch (e) {
         n?.cleanup();
         n = undefined;
+        releaseMemory?.();
         if (!abort.signal.aborted) {
           setError(e instanceof Error ? e.message : String(e));
           setStatus("");
@@ -611,6 +746,7 @@ function ComparisonPane({
       viewer.current = null;
       local.current = null;
       n?.cleanup();
+      releaseMemory?.();
     };
   }, [file, attempt]);
   useEffect(() => {
@@ -641,7 +777,7 @@ function ComparisonPane({
   }
   return (
     <article
-      className={`comparison-pane ${controlsOpen ? "scan-controls-open" : ""}`}
+      className={`comparison-pane ${controlsOpen ? "scan-controls-open" : ""} ${annotationsOpen ? "annotations-open" : ""}`}
     >
       <header>
         <strong>
@@ -669,8 +805,22 @@ function ComparisonPane({
         >
           Open in main viewer
         </button>
+        <button
+          className="btn small"
+          aria-expanded={annotationsOpen}
+          onClick={() => setAnnotationsOpen((value) => !value)}
+        >
+          Annotations
+        </button>
         <button className="btn small" onClick={onFocus}>
           {focused ? "Show all" : "Expand image"}
+        </button>
+        <button
+          className="btn small"
+          onClick={onRemove}
+          aria-label={`Close scan ${study.participant} ${file.name}`}
+        >
+          Close scan
         </button>
         <button
           className="btn small"
@@ -698,6 +848,18 @@ function ComparisonPane({
         {status && <p role="status">{status}</p>}
         {error && <p role="alert">{error}</p>}
       </div>
+      <ScanAnnotations
+        getViewer={() => viewer.current}
+        ready={ready}
+        source={annotationSource(file)}
+        name={file.name}
+        onLocate={(slice) => {
+          onAnnotationLocate(slice);
+          setFrame(viewer.current?.volumes[0].frame4D || 0);
+          captureView();
+        }}
+        open={annotationsOpen}
+      />
       <div
         className="comparison-controls"
         hidden={!controlsOpen && !status && !error}
@@ -720,7 +882,10 @@ function ComparisonPane({
         {error && (
           <button
             className="btn small"
-            onClick={() => setAttempt((value) => value + 1)}
+            onClick={() => {
+              forgetComparisonScan(file);
+              setAttempt((value) => value + 1);
+            }}
           >
             Retry scan
           </button>

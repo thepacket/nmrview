@@ -7,13 +7,16 @@ export function RepositoryCatalog({
   mode,
   disabled,
   onChoose,
+  term,
+  onTermChange,
 }: {
   provider: string;
   mode: "mri" | "nmr";
   disabled: boolean;
   onChoose: (id: string) => void;
+  term: string;
+  onTermChange: (value: string) => void;
 }) {
-  const [term, setTerm] = useState(mode === "mri" ? "brain" : "NMR");
   const [filter, setFilter] = useState(
     provider === "zenodo" ? "dataset" : "all",
   );
@@ -46,6 +49,18 @@ export function RepositoryCatalog({
         more
           ? {
               ...next,
+              checked: (results?.checked || 0) + (next.checked || 0),
+              excluded: next.excluded
+                ? (Object.fromEntries(
+                    Object.entries(next.excluded).map(([key, value]) => [
+                      key,
+                      value +
+                        (results?.excluded?.[
+                          key as keyof NonNullable<DatasetResults["excluded"]>
+                        ] || 0),
+                    ]),
+                  ) as DatasetResults["excluded"])
+                : undefined,
               hits: [...(results?.hits || []), ...next.hits].filter(
                 (hit, i, all) => all.findIndex((h) => h.id === hit.id) === i,
               ),
@@ -76,8 +91,10 @@ export function RepositoryCatalog({
         {provider === "openneuro"
           ? "public MRI datasets on OpenNeuro"
           : "open records on Zenodo"}
-        . Only records with supported files are shown. Spectrum files and ZIP
-        contents are checked automatically.
+        . Only records with supported files are shown.
+        {mode === "mri"
+          ? " MRI archives and raw scanner formats are not directly loadable. OpenNeuro focuses on neuroimaging; use Zenodo for other body regions. Zenodo also matches knee/knees and femur/femoral."
+          : " Spectrum files and ZIP contents are checked automatically."}
       </p>
       <form
         onSubmit={(e) => {
@@ -92,7 +109,7 @@ export function RepositoryCatalog({
             className="field"
             maxLength={200}
             value={term}
-            onChange={(e) => setTerm(e.target.value)}
+            onChange={(e) => onTermChange(e.target.value)}
             disabled={busy || disabled}
             placeholder="Search by topic, title or author"
           />
@@ -142,6 +159,28 @@ export function RepositoryCatalog({
             {results.hits.length
               ? `${results.hits.length} results loaded${results.total != null ? ` · ${results.total.toLocaleString()} matches` : ""} for “${last.current.term || "all public datasets"}”`
               : "No compatible datasets found in the checked results."}
+          </p>
+          <p className="hint">
+            {results.checked || 0} records checked
+            {results.catalogTotal != null
+              ? ` of ${results.catalogTotal} catalog matches`
+              : ""}
+            .
+            {results.excluded && (
+              <>
+                {" "}
+                {results.excluded.archives > 0 &&
+                  `${results.excluded.archives} archive-only records hidden. `}
+                {results.excluded.oversized > 0 &&
+                  `${results.excluded.oversized} records exceed the volume size limit. `}
+                {results.excluded.unsupported > 0 &&
+                  `${results.excluded.unsupported} records have no directly supported volume files. `}
+                {results.excluded.unchecked > 0 &&
+                  `${results.excluded.unchecked} records could not be checked; retry the search. `}
+              </>
+            )}
+            {results.next &&
+              " More catalog results remain; this is not an exhaustive result."}
           </p>
           <div className="catalog-results">
             {results.hits.map((hit) => (

@@ -17,13 +17,33 @@ export type DatasetResults = {
   hits: DatasetHit[];
   next?: string;
   total?: number;
+  checked?: number;
+  excluded?: {
+    archives: number;
+    unsupported: number;
+    oversized: number;
+    unchecked: number;
+  };
+  catalogTotal?: number;
+};
+const anatomyTerms: Record<string, string[]> = {
+  knee: ["knee", "knees"],
+  knees: ["knee", "knees"],
+  femur: ["femur", "femurs", "femoral"],
+  femoral: ["femur", "femurs", "femoral"],
 };
 export function zenodoSearchQuery(term: string, datasetsOnly: boolean) {
   const words = term
     .trim()
     .split(/\s+/)
     .filter(Boolean)
-    .map((word) => `"${word.replace(/[\\"]/g, "\\$&")}"`);
+    .map((word) => {
+      const variants = anatomyTerms[word.toLowerCase()] || [word];
+      const quoted = variants.map(
+        (value) => `"${value.replace(/[\\"]/g, "\\$&")}"`,
+      );
+      return quoted.length > 1 ? `(${quoted.join(" OR ")})` : quoted[0];
+    });
   return [
     ...words,
     "access_right:open",
@@ -54,7 +74,7 @@ export async function searchPage(
       throw new Error("Invalid search page.");
     const query = new URLSearchParams({
       q: zenodoSearchQuery(term, filter === "dataset"),
-      size: "10",
+      size: mode === "mri" ? "25" : "10",
       page: String(page),
       sort: term.trim() ? "bestmatch" : "mostrecent",
     });
@@ -195,9 +215,18 @@ export async function searchDatasets(
   const { compatibleFiles } = await import("./repository-compatibility.ts");
   let next = cursor;
   const budget = { remaining: 128 * 1024 * 1024 };
+  let checked = 0;
+  let catalogTotal: number | undefined;
+  const excluded = { archives: 0, unsupported: 0, oversized: 0, unchecked: 0 };
   // Skip empty catalog pages automatically, but bound each user request.
-  for (let page = 0; page < 3; page++) {
+  for (
+    let page = 0;
+    page < (provider === "zenodo" && mode === "mri" ? 10 : 3);
+    page++
+  ) {
     const result = await searchPage(provider, term, filter, signal, next, mode);
+    checked += result.hits.length;
+    catalogTotal = result.total;
     const hits: DatasetHit[] = [];
     let index = 0;
     const outcomes: boolean[] = [];
@@ -240,12 +269,31 @@ export async function searchDatasets(
               }
             }
           } catch {
+            excluded.unchecked++;
             signal.throwIfAborted();
           }
         }
       }),
     );
     result.hits.forEach((hit, i) => {
+      if (!outcomes[i] && provider === "zenodo" && mode === "mri") {
+        const files = hit.files || [];
+        if (
+          files.some(
+            (f) =>
+              /\.(nii(\.gz)?|nrrd|mgh|mgz)$/i.test(f.name) &&
+              f.size > 512 * 1024 * 1024,
+          )
+        )
+          excluded.oversized++;
+        else if (
+          files.some((f) =>
+            /\.(zip|7z|rar|tar|tgz|tar\.gz|tar\.gz[a-z]+)$/i.test(f.name),
+          )
+        )
+          excluded.archives++;
+        else excluded.unsupported++;
+      }
       if (outcomes[i])
         hits.push({
           ...hit,
@@ -256,7 +304,8 @@ export async function searchDatasets(
         });
     });
     next = result.next;
-    if (hits.length || !next) return { hits, next };
+    if (hits.length || !next)
+      return { hits, next, checked, excluded, catalogTotal };
   }
-  return { hits: [], next };
+  return { hits: [], next, checked, excluded, catalogTotal };
 }

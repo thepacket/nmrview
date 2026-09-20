@@ -1765,3 +1765,95 @@ button svg {
     font-size: 11px;
   }
 }
+
+.scan-cache-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+.scan-cache-controls small {
+  color: var(--muted-foreground, #a4b2bd);
+  flex-basis: 100%;
+}
+
+.scan-annotations {
+  padding: 12px;
+  font-size: 12px;
+}
+.scan-annotations[hidden] {
+  display: none;
+}
+.comparison-pane > .scan-annotations {
+  max-height: 35dvh;
+  overflow: auto;
+  flex-shrink: 0;
+  border-top: 1px solid #31404a;
+}
+.scan-annotations .full-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.scan-annotations .annotation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.scan-annotations .annotation input {
+  width: 130px;
+}
+.scan-annotations .annotation-label {
+  display: inline-flex;
+  width: 48%;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+}
+.scan-annotations .annotation-label input {
+  min-width: 0;
+  width: 100%;
+}
+.scan-annotations textarea {
+  width: 100%;
+  min-height: 60px;
+}
+.image-first .comparison-pane.annotations-open {
+  grid-template-rows: auto minmax(220px, 1fr) minmax(0, auto) auto;
+  min-height: 500px;
+}
+.image-first .comparison-pane.annotations-open > .scan-annotations {
+  grid-row: 3;
+}
+.image-first .comparison-pane.annotations-open.scan-controls-open {
+  grid-template-rows: auto auto minmax(220px, 1fr) minmax(0, auto) auto;
+}
+.image-first
+  .comparison-pane.annotations-open.scan-controls-open
+  > .scan-annotations {
+  grid-row: 4;
+}
+.image-first
+  .comparison-pane.annotations-open.scan-controls-open
+  > .comparison-controls {
+  grid-row: 5;
+}
+
+/* Let docked panels enlarge their row instead of overlapping the next scan. */
+@media (max-width: 700px) {
+  .image-first .comparison-grid:not(.single),
+  .image-first .comparison-grid.single {
+    grid-auto-rows: minmax(min-content, 1fr);
+  }
+  .image-first .comparison-pane {
+    min-height: max(270px, 65dvh);
+  }
+  .image-first .comparison-pane.scan-controls-open {
+    min-height: max(460px, 65dvh);
+  }
+  .image-first .comparison-pane.annotations-open {
+    min-height: max(500px, 65dvh);
+  }
+}

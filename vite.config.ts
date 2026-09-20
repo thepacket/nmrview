@@ -52,8 +52,15 @@ export default defineConfig(async () => {
 
   return {
     server: {
-      ...(managedLinux ? { host: "0.0.0.0", allowedHosts: ["terminal.local"] } : {}),
-      ...(isCodexSeatbeltSandbox ? { watch: { useFsEvents: false, usePolling: true } } : {}),
+      ...(managedLinux
+        ? { host: "0.0.0.0", allowedHosts: ["terminal.local"] }
+        : {}),
+      watch: {
+        ignored: ["**/*.tsbuildinfo", "**/dist/**"],
+        ...(isCodexSeatbeltSandbox
+          ? { useFsEvents: false, usePolling: true }
+          : {}),
+      },
     },
     plugins: [
       vinext(),

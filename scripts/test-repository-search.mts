@@ -8,6 +8,12 @@ assert.equal(
   '"NMR" AND "glucose" AND access_right:open AND resource_type.type:dataset',
 );
 assert.ok(zenodoSearchQuery('a"b', false).includes('a\\"b'));
+assert.ok(
+  zenodoSearchQuery("femur", true).includes(
+    '("femur" OR "femurs" OR "femoral")',
+  ),
+);
+assert.ok(zenodoSearchQuery("knee", true).includes('("knee" OR "knees")'));
 const original = globalThis.fetch;
 try {
   globalThis.fetch = async (url, options) => {
