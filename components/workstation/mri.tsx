@@ -220,7 +220,7 @@ export default function MRIWorkspace({
           fontMinPx: 13,
           fontSizeScaling: 0.4,
           multiplanarShowRender: 1,
-          multiplanarLayout: 2,
+          multiplanarLayout: 0,
           dragAndDropEnabled: false,
           isRadiologicalConvention: false,
         });
@@ -694,7 +694,13 @@ export default function MRIWorkspace({
         </div>
         <div className="panel-section">
           {collection && (
-            <button className="btn wide" onClick={() => setComparing(true)}>
+            <button
+              className="btn wide"
+              onClick={() => {
+                onClosePanel();
+                setComparing(true);
+              }}
+            >
               Compare participants ({collection.studies.length} studies)
             </button>
           )}

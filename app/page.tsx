@@ -59,6 +59,23 @@ export default function Home() {
         </Tabs>
         <div className="header-actions">
           <button
+            className="btn icon"
+            aria-label="Layers"
+            title="Layers"
+            onClick={() => setPanel(panel === "layers" ? "" : "layers")}
+          >
+            <Layers />
+          </button>
+          <button
+            className="btn icon"
+            aria-label="Controls"
+            title="Controls"
+            onClick={() => setPanel(panel === "controls" ? "" : "controls")}
+          >
+            <SlidersHorizontal />
+          </button>
+
+          <button
             className="btn ghost icon"
             title="Help and data sources"
             aria-label="Help and data sources"
@@ -81,22 +98,7 @@ export default function Home() {
           </button>
         </div>
       </header>
-      <div className="mobile-bar">
-        <button
-          className="btn mobile-toggle"
-          onClick={() => setPanel(panel === "layers" ? "" : "layers")}
-        >
-          <Layers />
-          Layers
-        </button>
-        <button
-          className="btn mobile-toggle"
-          onClick={() => setPanel(panel === "controls" ? "" : "controls")}
-        >
-          <SlidersHorizontal />
-          Controls
-        </button>
-      </div>
+
       <div style={{ display: mode === "mri" ? "contents" : "none" }}>
         <MRIWorkspace
           panel={panel}

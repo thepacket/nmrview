@@ -53,6 +53,9 @@ export function StudyComparison({
   const [notes, setNotes] = useState<string | null>(saved?.notes || null);
   const [saveStatus, setSaveStatus] = useState("");
   const [matchStatus, setMatchStatus] = useState("");
+  const [showParticipants, setShowParticipants] = useState(false);
+  const [showTools, setShowTools] = useState(false);
+  const [focused, setFocused] = useState<string | null>(null);
   function matchSelectedScans() {
     const first = collection.studies.find((s) => s.id === selected[0]);
     if (!first) return;
@@ -101,23 +104,40 @@ export function StudyComparison({
     (f) => f.name === (choices[study.id] || study.initialFile),
   );
   return (
-    <section className="study-comparison" aria-label="Participant comparison">
+    <section
+      className={`study-comparison image-first ${showParticipants ? "participants-open" : ""} ${showTools ? "tools-open" : ""}`}
+      aria-label="Participant comparison"
+    >
       <header>
         <div>
-          <h2>{collection.title}</h2>
+          <h2 title={collection.title}>{collection.title}</h2>
           <p>
             {collection.studies.length} participant/session studies ·{" "}
             {selected.length} displayed
           </p>
         </div>
         <button
+          className="btn small"
+          aria-expanded={showParticipants}
+          onClick={() => setShowParticipants((v) => !v)}
+        >
+          Participants ({selected.length})
+        </button>
+        <button
+          className="btn small"
+          aria-expanded={showTools}
+          onClick={() => setShowTools((v) => !v)}
+        >
+          Comparison tools
+        </button>
+        <button
           className="btn"
           onClick={() => setNotes(notes ? null : "dataset")}
         >
-          Study documentation
+          Notes
         </button>
         <button className="btn" onClick={onClose}>
-          Back to main viewer
+          Main viewer
         </button>
         <button
           className="btn"
@@ -128,7 +148,7 @@ export function StudyComparison({
             )
           }
         >
-          Export collection
+          Export
         </button>
       </header>
       <div className="comparison-body">
@@ -227,40 +247,47 @@ export function StudyComparison({
           )}
           <div
             style={{ display: notes ? "none" : undefined }}
-            className={`comparison-grid ${selected.length === 1 ? "single" : ""}`}
+            className={`comparison-grid ${selected.length === 1 || focused ? "single" : ""}`}
           >
             {!selected.length && (
               <p>Select a participant from the study list.</p>
             )}
-            {selected.map((id) => {
-              const s = collection.studies.find((s) => s.id === id)!;
-              const f = s.files.find(
-                (f) => f.name === (choices[id] || s.initialFile),
-              )!;
-              return (
-                <ComparisonPane
-                  key={paneViewKey(id, f.name)}
-                  initialView={panes[paneViewKey(id, f.name)]}
-                  onView={(view) =>
-                    setPanes((current) => {
-                      const key = paneViewKey(id, f.name);
-                      return JSON.stringify(current[key]) ===
-                        JSON.stringify(view)
-                        ? current
-                        : { ...current, [key]: view };
-                    })
-                  }
-                  study={s}
-                  file={f}
-                  layout={layout}
-                  location={linked ? location : null}
-                  onLocation={(frac) => setLocation({ from: id, frac })}
-                  onFile={(name) => setChoices((c) => ({ ...c, [id]: name }))}
-                  onNotes={() => setNotes(id)}
-                  onOpen={onOpen}
-                />
-              );
-            })}
+            {selected
+              .filter(
+                (id) =>
+                  !focused || id === focused || !selected.includes(focused),
+              )
+              .map((id) => {
+                const s = collection.studies.find((s) => s.id === id)!;
+                const f = s.files.find(
+                  (f) => f.name === (choices[id] || s.initialFile),
+                )!;
+                return (
+                  <ComparisonPane
+                    focused={focused === id}
+                    onFocus={() => setFocused(focused === id ? null : id)}
+                    key={paneViewKey(id, f.name)}
+                    initialView={panes[paneViewKey(id, f.name)]}
+                    onView={(view) =>
+                      setPanes((current) => {
+                        const key = paneViewKey(id, f.name);
+                        return JSON.stringify(current[key]) ===
+                          JSON.stringify(view)
+                          ? current
+                          : { ...current, [key]: view };
+                      })
+                    }
+                    study={s}
+                    file={f}
+                    layout={layout}
+                    location={linked ? location : null}
+                    onLocation={(frac) => setLocation({ from: id, frac })}
+                    onFile={(name) => setChoices((c) => ({ ...c, [id]: name }))}
+                    onNotes={() => setNotes(id)}
+                    onOpen={onOpen}
+                  />
+                );
+              })}
           </div>
         </div>
       </div>
@@ -268,6 +295,8 @@ export function StudyComparison({
   );
 }
 function ComparisonPane({
+  focused,
+  onFocus,
   initialView,
   onView,
   study,
@@ -279,6 +308,8 @@ function ComparisonPane({
   onNotes,
   onOpen,
 }: {
+  focused: boolean;
+  onFocus: () => void;
   initialView?: PaneView;
   onView: (view: PaneView) => void;
   study: Study;
@@ -290,6 +321,7 @@ function ComparisonPane({
   onNotes: () => void;
   onOpen: (file: File) => Promise<void>;
 }) {
+  const [controlsOpen, setControlsOpen] = useState(false);
   const canvas = useRef<HTMLCanvasElement>(null),
     viewer = useRef<Niivue | null>(null),
     local = useRef<File | null>(null),
@@ -464,11 +496,22 @@ function ComparisonPane({
         <strong>
           {study.participant} {study.session}
         </strong>
-        <button className="btn small" onClick={onNotes}>
-          Case notes
+        <button className="btn small" onClick={onFocus}>
+          {focused ? "Show all" : "Expand image"}
+        </button>
+        <button
+          className="btn small"
+          aria-expanded={controlsOpen}
+          onClick={() => setControlsOpen((v) => !v)}
+        >
+          Scan controls
         </button>
       </header>
-      <ScanPicker study={study} file={file} onChange={onFile} />
+      {controlsOpen && (
+        <div className="pane-scan-picker">
+          <ScanPicker study={study} file={file} onChange={onFile} />
+        </div>
+      )}
       <div className="comparison-canvas">
         <canvas
           ref={canvas}
@@ -482,7 +525,13 @@ function ComparisonPane({
         {status && <p role="status">{status}</p>}
         {error && <p role="alert">{error}</p>}
       </div>
-      <div className="comparison-controls">
+      <div
+        className="comparison-controls"
+        hidden={!controlsOpen && !status && !error}
+      >
+        <button className="btn small" onClick={onNotes}>
+          Case notes
+        </button>
         {status && (
           <button
             className="btn small"
