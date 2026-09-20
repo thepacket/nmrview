@@ -30,7 +30,7 @@ export function compatibilitySummary(names: string[], mode: "mri" | "nmr") {
   if (names.some((n) => /\.zip$/i.test(n)))
     return mode === "nmr"
       ? "ZIP archive: contents unverified. It may contain microscopy, raw data or other unsupported files."
-      : "ZIP archive: direct MRI archive import is not supported. Extract it first and inspect the file formats.";
+      : "Online ZIP: supported volume entries are inspected automatically and fetched individually.";
   if (names.every((n) => /\.(pdf|docx?|xlsx?|pptx?)$/i.test(n)))
     return "Documents or spreadsheets only — no directly viewable scans or spectra.";
   if (names.some((n) => /\.(tiff?|png|jpe?g|svs|ndpi)$/i.test(n)))
@@ -72,6 +72,10 @@ export async function downloadPublic(
     u.password
   )
     throw new Error("Unsupported repository download address.");
+  if (u.hash.startsWith("#nmrview-zip=")) {
+    const { downloadZipVolume } = await import("./remote-zip.ts");
+    return downloadZipVolume(url, limit, signal, progress);
+  }
   const response = await fetch(u, {
     signal,
     credentials: "omit",

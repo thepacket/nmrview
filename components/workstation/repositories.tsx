@@ -34,13 +34,11 @@ export function RepositoryBrowser({
   onCollection?: (collection: StudyCollection) => void;
   onDocumentation?: (doc: CaseDocumentation) => void;
 }) {
-  const [provider, setProvider] = useState(
-    mode === "mri" ? "openneuro" : "zenodo",
-  );
+  const [provider, setProvider] = useState("zenodo");
   const [catalogTerm, setCatalogTerm] = useState(
-    mode === "mri" ? "brain" : "NMR",
+    mode === "mri" ? "" : "NMR",
   );
-  const [input, setInput] = useState(mode === "mri" ? "ds000228" : "4616665");
+  const [input, setInput] = useState(mode === "mri" ? "14934086" : "4616665");
   const [record, setRecord] = useState<RepositoryRecord | null>(null);
   const [query, setQuery] = useState("");
   const [subject, setSubject] = useState("all");
@@ -273,7 +271,13 @@ export function RepositoryBrowser({
         onChange={(v) => {
           if (busy) return;
           setProvider(v);
-          setInput(v === "openneuro" ? "ds000228" : "4616665");
+          setInput(
+            v === "openneuro"
+              ? "ds000228"
+              : mode === "mri"
+                ? "14934086"
+                : "4616665",
+          );
           setRecord(null);
           setSelected([]);
         }}

@@ -18,8 +18,21 @@ export async function compatibleFiles(
   budget = { remaining: 128 * 1024 * 1024 },
 ): Promise<RepositoryFile[]> {
   const accepted: RepositoryFile[] = [];
+  let archiveFailure: unknown;
   for (const file of files) {
     signal.throwIfAborted();
+    if (mode === "mri" && /\.zip$/i.test(file.name)) {
+      const { onlineZipVolumes } = await import("./remote-zip.ts");
+      try {
+        const volumes = await onlineZipVolumes(file, signal, budget);
+        accepted.push(...(firstOnly ? volumes.slice(0, 1) : volumes));
+        if (firstOnly && volumes.length) break;
+      } catch (error) {
+        signal.throwIfAborted();
+        archiveFailure = error;
+      }
+      continue;
+    }
     const archive = mode === "nmr" && /\.zip$/i.test(file.name);
     if (
       (!supportedFile(file.name, mode) && !archive) ||
@@ -67,6 +80,7 @@ export async function compatibleFiles(
       if (firstOnly) break;
     }
   }
+  if (!accepted.length && archiveFailure) throw archiveFailure;
   return accepted;
 }
 export async function compatibleArchiveEntries(

@@ -215,6 +215,7 @@ export async function searchDatasets(
   const { compatibleFiles } = await import("./repository-compatibility.ts");
   let next = cursor;
   const budget = { remaining: 128 * 1024 * 1024 };
+  const deadline = Date.now() + 45000;
   let checked = 0;
   let catalogTotal: number | undefined;
   const excluded = { archives: 0, unsupported: 0, oversized: 0, unchecked: 0 };
@@ -230,19 +231,25 @@ export async function searchDatasets(
     const hits: DatasetHit[] = [];
     let index = 0;
     const outcomes: boolean[] = [];
+    const failed = new Set<number>();
     await Promise.all(
       Array.from({ length: Math.min(3, result.hits.length) }, async () => {
         while (index < result.hits.length) {
           const i = index++,
             hit = result.hits[i];
           try {
+            // A slow archive must not hold the entire catalog search open.
+            const checkSignal =
+              mode === "mri"
+                ? AbortSignal.any([signal, AbortSignal.timeout(10000)])
+                : signal;
             if (provider === "zenodo")
               outcomes[i] =
                 (
                   await compatibleFiles(
                     hit.files || [],
                     mode,
-                    signal,
+                    checkSignal,
                     true,
                     budget,
                   )
@@ -270,13 +277,19 @@ export async function searchDatasets(
             }
           } catch {
             excluded.unchecked++;
+            failed.add(i);
             signal.throwIfAborted();
           }
         }
       }),
     );
     result.hits.forEach((hit, i) => {
-      if (!outcomes[i] && provider === "zenodo" && mode === "mri") {
+      if (
+        !outcomes[i] &&
+        !failed.has(i) &&
+        provider === "zenodo" &&
+        mode === "mri"
+      ) {
         const files = hit.files || [];
         if (
           files.some(
@@ -304,7 +317,7 @@ export async function searchDatasets(
         });
     });
     next = result.next;
-    if (hits.length || !next)
+    if (hits.length || !next || Date.now() >= deadline)
       return { hits, next, checked, excluded, catalogTotal };
   }
   return { hits: [], next, checked, excluded, catalogTotal };

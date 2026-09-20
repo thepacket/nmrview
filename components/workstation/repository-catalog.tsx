@@ -93,7 +93,7 @@ export function RepositoryCatalog({
           : "open records on Zenodo"}
         . Only records with supported files are shown.
         {mode === "mri"
-          ? " MRI archives and raw scanner formats are not directly loadable. OpenNeuro focuses on neuroimaging; use Zenodo for other body regions. Zenodo also matches knee/knees and femur/femoral."
+          ? " ZIP archives are checked for supported volumes and scans load directly online. 7z, RAR and raw scanner formats are not supported. OpenNeuro focuses on neuroimaging; use Zenodo for other body regions. Zenodo also matches knee/knees and femur/femoral."
           : " Spectrum files and ZIP contents are checked automatically."}
       </p>
       <form
@@ -170,7 +170,7 @@ export function RepositoryCatalog({
               <>
                 {" "}
                 {results.excluded.archives > 0 &&
-                  `${results.excluded.archives} archive-only records hidden. `}
+                  `${results.excluded.archives} records in unsupported archives or archives without loadable volumes hidden. `}
                 {results.excluded.oversized > 0 &&
                   `${results.excluded.oversized} records exceed the volume size limit. `}
                 {results.excluded.unsupported > 0 &&

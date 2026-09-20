@@ -54,7 +54,7 @@ try {
             id: page,
             metadata: { access_right: "open", title: "Knee imaging" },
             files: [
-              { key: page === 4 ? "knee.nii.gz" : "images.zip", size: 100 },
+              { key: page === 4 ? "knee.nii.gz" : "images.7z", size: 100 },
             ],
           },
         ],
@@ -71,6 +71,24 @@ try {
   assert.equal(deeper.checked, 4);
   assert.equal(deeper.excluded?.archives, 3);
   assert.equal(deeper.catalogTotal, 100);
+  const originalNow = Date.now;
+  let elapsed = 0;
+  Date.now = () => {
+    elapsed += 50000;
+    return elapsed;
+  };
+  try {
+    const bounded = await searchDatasets("zenodo", "femur", "dataset", signal);
+    assert.equal(bounded.checked, 1);
+    assert.equal(
+      bounded.next,
+      "2",
+      "time budget preserves the continuation instead of timing out the whole search",
+    );
+  } finally {
+    Date.now = originalNow;
+  }
+
   assert.deepEqual(
     await compatibleFiles(
       [
