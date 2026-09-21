@@ -29,6 +29,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { registerScanSource, type ScanSnapshot } from "@/lib/assistant/scan";
+import { spectralSnapshot } from "@/lib/nmr/snapshot";
+import { SpectrumReview } from "./spectrum-review";
 import { CaseNotes } from "./case-documentation";
 import type { CaseDocumentation } from "@/lib/study-collection";
 import { RepositoryBrowser } from "./repositories";
@@ -76,6 +79,7 @@ export default function SpectraWorkspace({
   const [documentation, setDocumentation] = useState<CaseDocumentation | null>(
     null,
   );
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [spectra, setSpectra] = useState<Spectrum[]>([]),
     [selected, setSelected] = useState(""),
@@ -98,6 +102,7 @@ export default function SpectraWorkspace({
     [integralUnits, setIntegralUnits] = useState(1),
     [lesson, setLesson] = useState(true),
     [size, setSize] = useState({ w: 900, h: 600 });
+  const snapshot = useRef<ScanSnapshot | null>(null);
   const holder = useRef<HTMLDivElement>(null),
     svg = useRef<SVGSVGElement>(null),
     fileInput = useRef<HTMLInputElement>(null),
@@ -250,7 +255,7 @@ export default function SpectraWorkspace({
   }, [active, spectra]);
   function update(id: string, patch: Partial<Spectrum>) {
     setSpectra((s) => s.map((v) => (v.id === id ? { ...v, ...patch } : v)));
-    if (patch.shift !== undefined || patch.baseline) {
+    if (patch.shift !== undefined || patch.baseline || patch.phase) {
       setPeaks((p) => p.filter((v) => v.spectrumId !== id));
       setIntegrals((p) => p.filter((v) => v.spectrumId !== id));
       setReferenceIntegral("");
@@ -345,6 +350,52 @@ export default function SpectraWorkspace({
           .join(" "),
       })),
     [spectra, domain, layout, size, normalized, globalMax],
+  );
+  useEffect(() => {
+    snapshot.current = null;
+    if (!active || !svg.current || !visible.length) return;
+    let stale = false;
+    spectralSnapshot(svg.current, "Laboratory 1D NMR spectrum", {
+      domain,
+      layout,
+      normalized,
+      spectra: visible.map(
+        ({ name, nucleus, frequency, shift, baseline, phase, source }) => ({
+          name,
+          nucleus,
+          frequency,
+          shift,
+          baseline,
+          phase,
+          source,
+        }),
+      ),
+      peaks,
+      integrals,
+    })
+      .then((value) => {
+        if (!stale) snapshot.current = value;
+      })
+      .catch(() => {});
+    return () => {
+      stale = true;
+    };
+  }, [active, paths, peaks, integrals]);
+  useEffect(
+    () =>
+      registerScanSource("laboratory-spectrum", {
+        label: "Laboratory 1D NMR spectrum",
+        available: () =>
+          active &&
+          !!snapshot.current &&
+          !!svg.current?.getBoundingClientRect().width,
+        capture: () => {
+          if (!snapshot.current)
+            throw new Error("Spectrum preview is updating. Try again.");
+          return snapshot.current;
+        },
+      }),
+    [active],
   );
   function ppm(clientX: number) {
     const r = svg.current!.getBoundingClientRect();
@@ -719,6 +770,13 @@ export default function SpectraWorkspace({
           </span>
         </div>
         <div className="toolbar">
+          <button
+            className="btn"
+            disabled={!current}
+            onClick={() => setReviewOpen(true)}
+          >
+            Analysis & quality
+          </button>
           {TOOLS.map((t) => (
             <button
               key={t.id}
@@ -1261,7 +1319,42 @@ export default function SpectraWorkspace({
           </p>
         </div>
         <div className="panel-section">
-          <p className="eyebrow">Reference & baseline</p>
+          <p className="eyebrow">Reference, phase & baseline</p>
+          {current?.imaginary && (
+            <>
+              {([0, 1] as const).map((i) => (
+                <label className="control" key={i}>
+                  {i
+                    ? "First-order phase across spectrum (°)"
+                    : "Zero-order phase (°)"}
+                  <input
+                    className="field"
+                    type="number"
+                    min={i ? -720 : -360}
+                    max={i ? 720 : 360}
+                    value={current.phase?.[i] || 0}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (
+                        Number.isFinite(v) &&
+                        Math.abs(v) <= (i ? 720 : 360)
+                      ) {
+                        const phase: [number, number] = [
+                          ...(current.phase || [0, 0]),
+                        ];
+                        phase[i] = v;
+                        update(selected, { phase });
+                      }
+                    }}
+                  />
+                </label>
+              ))}
+              <p className="hint">
+                Complex spectrum rotation; pivot at axis center. Original real
+                and imaginary samples are retained.
+              </p>
+            </>
+          )}
           <button
             className={`btn wide ${tool === "reference" ? "active" : ""}`}
             disabled={!current}
@@ -1325,7 +1418,12 @@ export default function SpectraWorkspace({
               className="btn small"
               disabled={!current}
               onClick={() => {
-                update(selected, { baseline: [0, 0], shift: 0, gain: 1 });
+                update(selected, {
+                  baseline: [0, 0],
+                  phase: [0, 0],
+                  shift: 0,
+                  gain: 1,
+                });
                 setRefPeak(null);
               }}
             >
@@ -1390,6 +1488,33 @@ export default function SpectraWorkspace({
           </div>
         )}
       </aside>
+      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+        <DialogContent className="spectroscopy-review-dialog">
+          <DialogTitle>Spectroscopy analysis & quality</DialogTitle>
+          <DialogDescription>
+            Review selected spectrum: {current?.name}
+          </DialogDescription>
+          {current && (
+            <SpectrumReview
+              key={current.id}
+              s={current}
+              spectra={spectra}
+              peaks={peaks}
+              integrals={integrals}
+              onUpdate={(p) => update(selected, p)}
+              plotData={() => {
+                if (!svg.current) return "";
+                const clone = svg.current.cloneNode(true) as SVGSVGElement;
+                clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+                clone.setAttribute("width", String(w));
+                clone.setAttribute("height", String(h));
+                return new XMLSerializer().serializeToString(clone);
+              }}
+              onPlot={exportSVG}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={notesOpen} onOpenChange={setNotesOpen}>
         <DialogContent>
           <DialogTitle>Study documentation</DialogTitle>

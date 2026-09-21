@@ -13,6 +13,7 @@ NMRView is a responsive research and education workstation for viewing MRI volum
 - GPU-rendered multiplanar and 3D MRI views with layers, contrast controls, slice navigation, and 4D frame playback.
 - Participant comparison, acquisition metadata, persistent measurements and manual labels, and portable session exports.
 - Local volume and DICOM import, plus direct access to compatible public OpenNeuro and Zenodo data.
+- Laboratory 1D/2D and tissue NIfTI-MRS workflows, with spatial localization, reversible processing, quality review, and acquisition-matched research basis fitting.
 - Processed 1D spectroscopy: overlays, peak picking, integration, referencing, baseline correction, and export.
 - Optional OpenRouter assistant with your own key, model selection, explicitly shared scan snapshots, suggested location dots, and reported token usage/cost.
 - Desktop and mobile layouts with controls that leave room for the images.
@@ -40,6 +41,7 @@ The build produces a Cloudflare-compatible bundle in `dist/`. `npm start` runs t
 
 ## Documentation
 
+- [Spectroscopy workflows](docs/SPECTROSCOPY.md): 1D/2D NMR, tissue MRS, quality, fitting, maps, and limitations.
 - [User guide](docs/USER_GUIDE.md): viewing controls, supported formats, online sources, spectroscopy, AI, limits, and verification.
 - [Contributing](CONTRIBUTING.md): development workflow and focused checks.
 - [Security and privacy](SECURITY.md): reporting vulnerabilities and handling sensitive information.
@@ -51,7 +53,7 @@ The build produces a Cloudflare-compatible bundle in `dist/`. `npm start` runs t
 
 Scans are processed in the browser. Optional AI messages and explicitly attached viewport images go directly to OpenRouter and the selected provider. The API key stays in tab memory. Review the sharing preview and provider policies before sending information. Local storage and exported sessions can contain sensitive metadata or image data; use synthetic or openly licensed, de-identified examples when reporting problems.
 
-Images used as layers must already be registered. Comparison linking does not perform anatomical registration. Automated segmentation, raw FID processing, quantitative metabolite fitting, PACS/DICOMweb integration, and clinical validation are outside the current scope. AI dots are approximate suggestions on a frozen snapshot, not validated anatomical landmarks.
+Images used as layers must already be registered. Comparison linking does not perform anatomical registration. Automated segmentation, raw vendor-FID processing, absolute metabolite quantification, PACS/DICOMweb integration, and clinical validation are outside the current scope. AI dots are approximate suggestions on a frozen snapshot, not validated anatomical landmarks.
 
 ## License
 

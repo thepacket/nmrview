@@ -1882,3 +1882,32 @@ button svg {
 .assistant-localization-image img {display:block;width:100%;height:auto;}
 .assistant-dot {position:absolute;transform:translate(-50%,-50%);width:22px;height:22px;border-radius:50%;background:#facc15;color:#111;border:2px solid #111;box-shadow:0 0 0 2px white;display:flex;align-items:center;justify-content:center;font:bold 12px system-ui;pointer-events:none;}
 .assistant-localization-dialog {width:min(95vw,1200px)!important;max-width:1200px!important;max-height:92dvh;overflow:auto;}
+
+.spectroscopy-review-dialog { width: min(960px, 96vw); max-width: 960px; max-height: 92dvh; overflow-y: auto; }
+.spectrum-review { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; }
+.spectrum-review section { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
+.spectrum-review h3 { margin-bottom: 12px; }
+.spectrum-review fieldset { margin-block: 12px; }
+.spectrum-review table { width:100%; text-align:left; font-size:14px; }
+@media(max-width:700px) { .spectrum-review { grid-template-columns:1fr; } }
+.spectroscopy-shell { display:flex; flex-direction:column; min-height:0; min-width:0; flex:1; overflow:hidden; }
+.spectroscopy-shell > [data-slot=tabs] { flex:none; padding:4px 12px; }
+.spectroscopy-shell .workspace { flex:1; min-height:0; }
+.mrs-workspace { display:grid; grid-template-columns:minmax(0,1fr) 340px; flex:1; min-height:0; overflow:auto; }
+.mrs-image-area { min-width:0; padding:12px; overflow:auto; }
+.mrs-spectrum-plot { display:block; width:100%; height:380px; min-height:260px; touch-action:none; }
+.mrs-controls { overflow:auto; min-height:0; border-left:1px solid var(--border); padding:12px; }
+.mrs-controls section { padding:12px 0; border-bottom:1px solid var(--border); }
+.mrs-controls label { display:block; margin-block:8px; }
+.mrs-controls .field { width:100%; }
+.mrs-controls dd { overflow-wrap:anywhere; }
+.mrs-controls table { font-size:14px; text-align:left; width:100%; }
+.mrs-legend { display:flex; flex-wrap:wrap; gap:12px; font-size:13px; }
+.mrs-empty { padding:40px 12px; max-width:650px; }
+.mrs-error { color:#ffb9ac; padding:12px; }
+@media(max-width:800px) { .mrs-workspace { display:block; } .mrs-controls { overflow:visible; border-left:0; } .mrs-spectrum-plot { height:300px; } }
+.mrs-map { display:grid; max-width:640px; gap:2px; margin:12px 0; }
+.mrs-map .btn { min-width:0; padding:4px; font-size:12px; }
+.mrs-image-area > .view-heading { position:static; flex-shrink:0; margin:0; }
+.mrs-controls .metadata-fields { grid-template-columns:1fr; }
+.mrs-controls .metadata-fields > div { min-width:0; }

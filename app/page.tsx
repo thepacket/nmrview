@@ -20,7 +20,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import MRIWorkspace from "@/components/workstation/mri";
-import SpectraWorkspace from "@/components/workstation/spectra";
+import SpectraWorkspace from "@/components/workstation/spectroscopy-workbench";
 import { useWorkspaceTools } from "@/components/workstation/webmcp";
 import { Toaster } from "@/components/ui/sonner";
 export default function Home() {
@@ -176,10 +176,7 @@ export default function Home() {
             </p>
             <h3>NMR spectroscopy</h3>
             <p>
-              Import processed 1D JCAMP-DX spectra or two-column CSV files
-              (chemical shift in ppm, intensity). Compare spectra as overlays or
-              stacked traces. Peak picking and numerical integration operate on
-              the selected spectrum.
+              Choose Laboratory NMR for 1D spectra and quality review, 2D NMR for processed spectral maps, or Tissue MRS for online NIfTI-MRS acquisitions, anatomical localization and acquisition-matched basis analysis. Processing stays in the browser.
             </p>
             <h3>Free sample data</h3>
             <p>

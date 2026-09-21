@@ -391,11 +391,11 @@ export function Assistant({
         </p>
         <button
           className="btn small"
-          disabled={busy || mode !== "mri"}
+          disabled={busy}
           onClick={() => {
             const list = availableScanSources();
             setSources(list);
-            if (!list.length) setError("No loaded MRI view is visible.");
+            if (!list.length) setError("No loaded scan or spectrum view is visible.");
           }}
         >
           Choose displayed scan

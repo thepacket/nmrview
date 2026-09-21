@@ -4,6 +4,8 @@ export type Spectrum = {
   name: string;
   x: number[];
   y: number[];
+  imaginary?: number[];
+  phase?: [number, number];
   nucleus: string;
   frequency: number | null;
   solvent: string;
@@ -64,6 +66,7 @@ export function parseSpectrum(
   const results: {
     x: number[];
     y: number[];
+    imaginary?: number[];
     name: string;
     nucleus: string;
     frequency: number | null;
@@ -106,15 +109,20 @@ export function parseSpectrum(
       );
   } else {
     const x: number[] = [],
-      y: number[] = [];
+      y: number[] = [],
+      imaginary: number[] = [];
+    let columnCount = 0;
     let header = false;
     for (const raw of text.replace(/^\uFEFF/, "").split(/\r?\n/)) {
       const line = raw.trim();
       if (!line || line.startsWith("#")) continue;
       const cells = line.split(/[,;\t ]+/);
-      if (cells.length !== 2)
+      if (
+        ![2, 3].includes(cells.length) ||
+        (columnCount && cells.length !== columnCount)
+      )
         throw new Error(
-          "CSV must have exactly two columns: ppm and intensity.",
+          "CSV needs ppm, real intensity, and optionally imaginary intensity (consistent columns).",
         );
       const a = Number(cells[0]),
         b = Number(cells[1]);
@@ -125,11 +133,19 @@ export function parseSpectrum(
         }
         throw new Error("CSV contains a non-numeric data row.");
       }
+      columnCount = cells.length;
+      if (cells.length === 3) {
+        const value = Number(cells[2]);
+        if (!Number.isFinite(value))
+          throw new Error("Invalid imaginary intensity.");
+        imaginary.push(value);
+      }
       x.push(a);
       y.push(b);
     }
     results.push({
       ...validateXY(x, y),
+      ...(imaginary.length ? { imaginary: validateXY(x, imaginary).y } : {}),
       name,
       nucleus: "Unknown",
       frequency: null,
@@ -149,7 +165,16 @@ export function parseSpectrum(
   }));
 }
 export function correctedY(s: Spectrum, i: number) {
-  return s.y[i] - (s.baseline[0] * s.x[i] + s.baseline[1]);
+  if(!s.imaginary)return s.y[i]-(s.baseline[0]*s.x[i]+s.baseline[1]);
+  const p = s.phase || [0, 0];
+  const angle =
+    ((p[0] + p[1] * ((s.x[i] - s.x[0]) / (s.x.at(-1)! - s.x[0]) - 0.5)) *
+      Math.PI) /
+    180;
+  const value = s.imaginary
+    ? s.y[i] * Math.cos(angle) - s.imaginary[i] * Math.sin(angle)
+    : s.y[i];
+  return value - (s.baseline[0] * s.x[i] + s.baseline[1]);
 }
 // Input arrays are immutable. Weak keys let closed spectra and their indices
 // be collected. Only the current baseline's index is retained per data array.
@@ -157,6 +182,9 @@ const indexCache = new WeakMap<
   number[],
   {
     x: number[];
+    phase0: number;
+    phase1: number;
+    imaginary?: number[];
     slope: number;
     intercept: number;
     min: Int32Array;
@@ -171,6 +199,9 @@ function signalIndex(s: Spectrum) {
   if (
     cached &&
     cached.x === s.x &&
+    cached.imaginary === s.imaginary &&
+    cached.phase0 === (s.phase?.[0] || 0) &&
+    cached.phase1 === (s.phase?.[1] || 0) &&
     cached.slope === s.baseline[0] &&
     cached.intercept === s.baseline[1]
   )
@@ -197,6 +228,9 @@ function signalIndex(s: Spectrum) {
   }
   const index = {
     x: s.x,
+    phase0: s.phase?.[0] || 0,
+    phase1: s.phase?.[1] || 0,
+    imaginary: s.imaginary,
     slope: s.baseline[0],
     intercept: s.baseline[1],
     min,
@@ -331,8 +365,15 @@ export function baselineEstimate(s: Spectrum): [number, number] {
   const k = Math.max(2, Math.min(100, Math.floor(s.x.length * 0.02)));
   const median = (a: number[]) =>
     a.sort((a, b) => a - b)[Math.floor(a.length / 2)];
-  const first = median(s.y.slice(0, k)),
-    last = median(s.y.slice(-k));
+  const uncorrected = { ...s, baseline: [0, 0] as [number, number] };
+  const first = median(
+      Array.from({ length: k }, (_, i) => correctedY(uncorrected, i)),
+    ),
+    last = median(
+      Array.from({ length: k }, (_, i) =>
+        correctedY(uncorrected, s.x.length - k + i),
+      ),
+    );
   const slope = (last - first) / (s.x.at(-1)! - s.x[0]);
   return [slope, first - slope * s.x[0]];
 }
@@ -388,6 +429,21 @@ export function validateSession(value: unknown): {
     count += s.x.length;
     if (count > 5000000) throw new Error("Session exceeds 5 million points.");
     const xy = validateXY(s.x, s.y);
+    let imaginary: number[] | undefined;
+    if (s.imaginary !== undefined) {
+      if (!Array.isArray(s.imaginary))
+        throw new Error("Invalid complex spectrum.");
+      imaginary = validateXY(s.x, s.imaginary).y;
+    }
+    if (
+      s.phase !== undefined &&
+      (!Array.isArray(s.phase) ||
+        s.phase.length !== 2 ||
+        !s.phase.every(Number.isFinite) ||
+        Math.abs(s.phase[0]) > 360 ||
+        Math.abs(s.phase[1]) > 720)
+    )
+      throw new Error("Invalid phase correction.");
     if (
       !Number.isFinite(s.shift) ||
       !Number.isFinite(s.gain) ||
@@ -404,6 +460,7 @@ export function validateSession(value: unknown): {
     return {
       ...s,
       ...xy,
+      imaginary,
       color: /^#[0-9a-f]{6}$/i.test(s.color)
         ? s.color
         : COLORS[i % COLORS.length],

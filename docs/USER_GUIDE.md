@@ -27,6 +27,8 @@ Keyboard: C locate, W windowing, P pan, D distance, A angle, B draw, E erase, R 
 
 ## Spectroscopy workspace
 
+For the expanded laboratory 1D/2D and tissue MRS workflows, see [Spectroscopy workflows](SPECTROSCOPY.md). The controls below describe the laboratory 1D view.
+
 - Experimental processed 1D JCAMP-DX import, including compressed XY encodings and linked blocks, through the MIT-licensed jcampconverter 9.0.1.
 - Two-column CSV/TSV: chemical shift in ppm and intensity. Optional header. Hz JCAMP axes are converted using observe frequency; ambiguous axes are rejected.
 - Layered overlay or stacked displays; visibility, opacity, color and per-trace gain.
@@ -37,7 +39,7 @@ Keyboard: C locate, W windowing, P pan, D distance, A angle, B draw, E erase, R 
 - SVG plot, corrected CSV, analysis JSON, and full spectrum session JSON exports.
 - Up to 24 spectra / 5 million data points per session.
 
-Raw FID processing, Bruker acquisition folders, 2D spectroscopy, automatic assignments and quantitative concentration estimates are outside this version. Spectral comparisons should use compatible nuclei and acquisition conditions. Keyboard: Z region zoom, P pan, K peak, I integral, F reference, R fit, Escape cancel. Display scaling does not affect exported integrals.
+Raw vendor-FID processing, Bruker acquisition folders, automatic assignments and quantitative concentration estimates are outside this version. Tissue NIfTI-MRS time-domain processing and processed laboratory 2D spectra have separate views described in the spectroscopy guide. Spectral comparisons should use compatible nuclei and acquisition conditions. Keyboard: Z region zoom, P pan, K peak, I integral, F reference, R fit, Escape cancel. Display scaling does not affect exported integrals.
 
 ## Performance
 

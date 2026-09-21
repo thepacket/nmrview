@@ -1,4 +1,5 @@
 "use client";
+import { registerMRSAnatomy } from "@/lib/nmr/anatomy";
 import { registerScanSource, snapshotCanvas } from "@/lib/assistant/scan";
 import { registerAssistantViewer } from "@/lib/assistant/viewer";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -399,6 +400,7 @@ export default function MRIWorkspace({
     const m = n.frac2mm(p);
     setMM(Array.from(m).slice(0, 3));
   }
+  useEffect(() => registerMRSAnatomy(() => busy ? undefined : nv.current?.volumes[0]), [busy]);
   useEffect(
     () =>
       registerAssistantViewer({

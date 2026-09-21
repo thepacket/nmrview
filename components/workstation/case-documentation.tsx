@@ -41,7 +41,7 @@ function fieldLabel(key: string) {
     .replace(/_/g, " ");
 }
 
-function MetadataValue({
+export function MetadataValue({
   value,
   depth = 0,
 }: {
