@@ -1,5 +1,7 @@
 # NMRView
 
+![NMRView — MRI imaging and NMR spectroscopy](docs/nmrview-hero.png)
+
 **MRI imaging and NMR spectroscopy in your browser.**
 
 NMRView is a responsive research and education workstation for viewing MRI volumes, comparing scans, annotating anatomy, and exploring processed 1D NMR spectra. Its name refers to nuclear magnetic resonance, the physics behind MRI and NMR spectroscopy.
