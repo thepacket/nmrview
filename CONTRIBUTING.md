@@ -26,6 +26,7 @@ Run focused spectroscopy checks as applicable:
 node --experimental-strip-types scripts/test-spectroscopy-analysis.mts
 node --experimental-strip-types scripts/test-mrs-support.mts
 node --experimental-strip-types scripts/test-repository-traffic.mts
+node --experimental-strip-types scripts/test-idc.mts
 ```
 
 The supporting-file tests use mocked downloads. Preserve repository pacing, bounded requests, cancellation and explicit pagination; avoid live repository traffic in automated tests. For browser checks, record the public source and tested acquisition, including any explicit unit override. Failed optional-file discovery must not block spectrum viewing, and automatic basis discovery must not bypass compatibility checks or operator confirmation.

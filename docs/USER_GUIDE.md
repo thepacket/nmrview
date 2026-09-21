@@ -51,6 +51,8 @@ Spectra use a compact, cached extrema tree (64-sample blocks) for exact peak-pre
 
 ## Public online repositories
 
+For **Imaging Data Commons**, open **Import scans → Online repository → IDC · public MRI series**. Browse by body region and optional exact collection/participant IDs, then load one complete DICOM series into the main view. Source documentation and license information are retained in case notes. See the [IDC guide](IDC.md) for paging, download limits and current boundaries.
+
 For MRI and **Laboratory NMR**, open **Import scans → Public online repositories**. MRI supports OpenNeuro dataset IDs/URLs and Zenodo record IDs/URLs. Laboratory 1D NMR supports Zenodo, including browsing individual JCAMP/CSV/TSV members of ZIP archives. Examples: OpenNeuro `ds000228` (PDDL), Zenodo `4616665` (CC BY 4.0). Source/citation links, authors, license, file sizes, file-name filtering and OpenNeuro pagination are shown before loading. Only open Zenodo records are accepted.
 
 Downloads go directly from the repository to the browser with credentials omitted. The MRI/laboratory 1D importer provides progress, cancellation and a five-minute request timeout. Selection limits: 24 files, 512 MB for MRI or 60 MB for spectra. NMR ZIP extraction is asynchronous and limited to 60 MB expanded / 200 compatible entries; choose individual spectra before parsing. Failed downloads do not replace current data. Replace-current-study is on by default; disable it only to add compatible layers. File names retain repository/record identity, and NMR sessions retain source attribution.

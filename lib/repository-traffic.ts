@@ -5,8 +5,16 @@ export function createRepositoryTraffic(interval = 1000, now = Date.now) {
     string,
     { tail: Promise<void>; next: number; blocked: number }
   >();
-  const provider = (url: string | URL) =>
-    new URL(url).hostname === "zenodo.org" ? "Zenodo" : "OpenNeuro";
+  const provider = (url: string | URL) => {
+    const u = new URL(url);
+    if (
+      u.hostname === "api.imaging.datacommons.cancer.gov" ||
+      (u.hostname === "s3.amazonaws.com" &&
+        u.pathname.startsWith("/idc-open-data"))
+    )
+      return "IDC";
+    return u.hostname === "zenodo.org" ? "Zenodo" : "OpenNeuro";
+  };
   async function fetchRepository(url: string | URL, init: RequestInit = {}) {
     const name = provider(url);
     let state = states.get(name);

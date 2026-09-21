@@ -12,7 +12,7 @@ NMRView is a responsive research and education workstation for viewing MRI volum
 
 - GPU-rendered multiplanar and 3D MRI views with layers, contrast controls, slice navigation, and 4D frame playback.
 - Participant comparison, acquisition metadata, persistent measurements and manual labels, and portable session exports.
-- Local volume and DICOM import, plus direct access to compatible public OpenNeuro and Zenodo data.
+- Local volume and DICOM import, plus direct access to compatible public OpenNeuro and Zenodo data, plus complete MRI series from Imaging Data Commons (IDC).
 - Laboratory 1D/2D and tissue NIfTI-MRS workflows, with spatial localization, reversible processing, quality review, and acquisition-matched research basis fitting.
 - In-app Zenodo browsing for tissue MRS and 2D NMR, OpenNeuro MRS dataset lookup, and automatic discovery of optional acquisition notes and compatible Zenodo basis files.
 - Processed 1D spectroscopy: overlays, peak picking, integration, referencing, baseline correction, and export.
@@ -55,6 +55,8 @@ npm run build
 The build produces a Cloudflare-compatible bundle in `dist/`. `npm start` runs that build locally using Wrangler. The checked-in `.openai/hosting.json` identifies the maintainer's deployment; configure your own hosting project for independent deployment. It is not an access credential.
 
 ## Documentation
+
+- [IDC MRI browsing](docs/IDC.md): body-region filters, complete DICOM-series loading, source documentation and access limits.
 
 - [Spectroscopy workflows](docs/SPECTROSCOPY.md): 1D/2D NMR, tissue MRS, quality, fitting, maps, and limitations.
 - [User guide](docs/USER_GUIDE.md): viewing controls, supported formats, online sources, spectroscopy, AI, limits, and verification.
