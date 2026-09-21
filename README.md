@@ -4,7 +4,7 @@
 
 **MRI imaging and NMR spectroscopy in your browser.**
 
-NMRView is a responsive research and education workstation for viewing MRI volumes, comparing scans, annotating anatomy, and exploring processed 1D NMR spectra. Its name refers to nuclear magnetic resonance, the physics behind MRI and NMR spectroscopy.
+NMRView is a responsive research and education workstation for viewing MRI volumes, comparing scans, annotating anatomy, and analyzing laboratory 1D/2D NMR spectra and tissue MR spectroscopy (MRS). Its name refers to nuclear magnetic resonance, the physics behind MRI and NMR spectroscopy.
 
 > Research and education software. Not validated or certified for diagnosis or clinical decision-making.
 
@@ -14,9 +14,24 @@ NMRView is a responsive research and education workstation for viewing MRI volum
 - Participant comparison, acquisition metadata, persistent measurements and manual labels, and portable session exports.
 - Local volume and DICOM import, plus direct access to compatible public OpenNeuro and Zenodo data.
 - Laboratory 1D/2D and tissue NIfTI-MRS workflows, with spatial localization, reversible processing, quality review, and acquisition-matched research basis fitting.
+- In-app Zenodo browsing for tissue MRS and 2D NMR, OpenNeuro MRS dataset lookup, and automatic discovery of optional acquisition notes and compatible Zenodo basis files.
 - Processed 1D spectroscopy: overlays, peak picking, integration, referencing, baseline correction, and export.
 - Optional OpenRouter assistant with your own key, model selection, explicitly shared scan snapshots, suggested location dots, and reported token usage/cost.
 - Desktop and mobile layouts with controls that leave room for the images.
+
+## Choose a spectroscopy workflow
+
+Open **NMR spectroscopy** and select the view that matches your data:
+
+| View | Input | Get started |
+| --- | --- | --- |
+| Laboratory NMR | Processed 1D JCAMP-DX or ppm/intensity CSV/TSV; complex CSV is also supported | Use **Import scans** for the existing local or public-repository importer. |
+| 2D NMR | Processed 2D JCAMP-DX or a complete `f2_ppm,f1_ppm,intensity` CSV grid | Open **Browse online acquisitions**, search Zenodo or enter a record ID, then load a file. |
+| Tissue MRS | Complex time-domain NIfTI-MRS (`.nii` / `.nii.gz`) | Browse Zenodo or enter an OpenNeuro dataset ID, then load an acquisition. |
+
+A tissue-MRS acquisition alone is enough to display, process, compare and export spectra. A basis set is optional for metabolite fitting; a matching, registered MRI is optional for anatomical localization. Ordinary MRI volumes do not contain the required spectroscopy signal. Line broadening defaults to **0 Hz**.
+
+Repository lists in the 2D and tissue-MRS views show candidate file types and sizes; contents are validated during import. See the [spectroscopy guide](docs/SPECTROSCOPY.md) for supported formats, acquisition requirements and current limitations.
 
 ## Run locally
 

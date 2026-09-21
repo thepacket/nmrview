@@ -2,6 +2,22 @@
 
 Open **NMR spectroscopy**, then choose **Laboratory NMR**, **2D NMR**, or **Tissue MRS**. Switching views retains loaded data in this tab. New online imports use the existing host allowlist, request pacing, size limits and cancellation. No processing service or patient-data upload is introduced.
 
+## Required and optional inputs
+
+One NIfTI-MRS acquisition is sufficient for spectrum display, processing, comparison, quality review and export. Fitting and anatomical localization are optional, collapsed sections. A conventional MRI cannot replace the spectroscopy acquisition.
+
+After loading, NMRView checks the online source in the background without blocking spectrum use. For Zenodo, it reads one record listing, the exact acquisition JSON sidecar if present, and at most three JSON files with “basis” in their names. It loads a basis only if exactly one inspected candidate matches nucleus, frequency (0.1% tolerance), echo time and sequence. Processing and amplitude conventions still require operator verification before fitting. Multiple matches are not automatically selected. Standard basis formats other than `nmrview-basis-1` are not converted.
+
+For OpenNeuro S3 files, the exact adjacent JSON sidecar is checked; inherited BIDS sidecars and remote basis discovery are not currently resolved. Notes are displayed as formatted metadata and included in review exports; they do not override the acquisition header. Discovery uses the existing repository pacing, a 30-second deadline and bounded downloads. Missing optional files never prevent viewing.
+
+Anatomical scans are not chosen automatically: sharing a repository does not establish participant identity or spatial registration. Load the matching MRI in the main view and confirm its coordinate space in the optional anatomy section.
+
+## Browse acquisitions without direct file URLs
+
+Tissue MRS and 2D NMR include **Browse online acquisitions**. Search Zenodo, open a result, and load a listed file; you can also enter a record ID or URL. Tissue MRS additionally accepts OpenNeuro dataset IDs and lists acquisitions from BIDS `mrs` folders. Large OpenNeuro listings are paged with **More files**. The Laboratory NMR workspace retains its existing repository browser.
+
+Search checks ten Zenodo records per page, reuses results for five minutes, and does not download acquisition files. **Find more records** is explicit; there is no background crawl. File names and sizes filter candidates, and the existing parser validates the selected file during loading. A `.nii.gz` suffix alone does not prove NIfTI-MRS content, and a CSV or JCAMP suffix does not prove a 2D spectrum. Case documentation and license links remain available alongside the file list.
+
 ## Laboratory 1D NMR
 
 The existing JCAMP-DX and CSV workflow retains peak picking, integration, referencing, baseline correction, overlay/stacked layouts, SVG and session exports. CSV now also accepts three columns: `ppm,real,imaginary`. Both complex arrays are retained, and zero/first-order phase controls appear only when imaginary data exist. Phase is in degrees, with first-order pivot at the ppm axis midpoint. Baseline estimation uses the phase-corrected spectrum. Changing processing clears dependent peak/integral analyses; display gain does not affect numerical results. Session exports retain the complex data and phase settings.
@@ -16,7 +32,7 @@ The existing JCAMP-DX and CSV workflow retains peak picking, integration, refere
 
 ## Processed 2D laboratory NMR
 
-Load a direct public Zenodo or OpenNeuro S3 file URL in **2D NMR**. Accepted input:
+In **2D NMR**, open **Browse online acquisitions** to search Zenodo or enter a record ID/URL, then choose **Load 2D spectrum**. A direct public Zenodo or OpenNeuro S3 file URL is also accepted. Accepted input:
 
 - Processed 2D JCAMP-DX whose two independent NTUPLES axes explicitly use ppm.
 - Rectangular, uniformly spaced CSV grids with the exact header `f2_ppm,f1_ppm,intensity`; each coordinate pair appears once.
@@ -25,7 +41,7 @@ Limits: 32 MB download, one million cells, 60-second import deadline. Parsing ru
 
 ## Tissue MRS
 
-Load a direct public `.nii`/`.nii.gz` URL in **Tissue MRS**. The dedicated importer accepts NIfTI-MRS complex64/complex128 time-domain acquisitions with the MRS intent and JSON extension code 44. It does not treat an ordinary anatomical NIfTI file as a spectrum.
+In **Tissue MRS**, open **Browse online acquisitions**, search Zenodo or enter a Zenodo record/OpenNeuro dataset ID, and choose **Load MRS**. Alternatively, enter a direct public `.nii`/`.nii.gz` URL. The dedicated importer accepts NIfTI-MRS complex64/complex128 time-domain acquisitions with the MRS intent and JSON extension code 44. It does not treat an ordinary anatomical NIfTI file as a spectrum.
 
 Limits: 64 MB downloaded, 128 MB decompressed, eight million complex samples, 16–65,536 time points per FID. The worker retains original data and is terminated on cancellation or a 60-second processing deadline. Higher-dimensional coil, dynamic and editing indices are selected individually, never implicitly averaged. Spatial k-space is rejected. Positive-gyromagnetic nuclei currently supported for display: 1H, 13C, 19F, 23Na and 31P.
 
@@ -47,7 +63,7 @@ Load the matching anatomical scan in the main MRI viewer, then explicitly confir
 
 The initial fitter is a **restricted research linear-basis fitter**, not a replacement for FSL-MRS, LCModel or a clinical quantification workflow. It fits nonnegative fixed spectral-template amplitudes plus an unconstrained linear baseline over the visible ppm interval. It does not optimize component frequency shifts/linewidths or simulate acquisition-specific basis functions. Basis and data must already have compatible phase, referencing, line shapes and processing. Edge-baseline correction must be disabled when fitting.
 
-The operator supplies an acquisition-matched basis JSON through a public repository URL, confirms compatibility, and runs the fit explicitly. Nucleus and frequency must match (frequency tolerance 0.1%); EchoTime and SequenceName must match acquisition metadata. Supported per-acquisition header overrides are resolved before checking. Singular/near-collinear bases and non-convergence are rejected. Amplitudes use **arbitrary basis units**, not absolute concentrations. Reported errors are conditional OLS approximations under fixed-model assumptions, not CRLB estimates or validated confidence intervals.
+NMRView can discover and load a uniquely matching basis from the source Zenodo record; otherwise the operator supplies a basis JSON through a public repository URL. In either case, the operator verifies processing conventions, confirms compatibility, and runs the fit explicitly. Nucleus and frequency must match (frequency tolerance 0.1%); EchoTime and SequenceName must match acquisition metadata. Supported per-acquisition header overrides are resolved before checking. Singular/near-collinear bases and non-convergence are rejected. Amplitudes use **arbitrary basis units**, not absolute concentrations. Reported errors are conditional OLS approximations under fixed-model assumptions, not CRLB estimates or validated confidence intervals.
 
 The plot can show total fit, residuals, fitted baseline and individual components. For multivoxel data, fit the current XY slice (maximum 256 voxels) to create an amplitude or component-ratio map. Failed fits and components below three approximate standard errors are masked. A ratio denominator must also exceed that threshold. The acquisition-grid map is not an anatomical orientation; use the registered anatomy overlay for location. Map values, mask, residual errors and geometry are exported in JSON. Map display uses a relative color scale; numerical values are retained in the export.
 
@@ -71,22 +87,21 @@ The existing AI attachment workflow now accepts visible 1D/2D spectra, tissue-MR
 
 ## Verification and limits
 
-`node --experimental-strip-types scripts/test-spectroscopy-analysis.mts` checks analytical line width, SNR intervals, alignment direction, coupling spacing, complex phase/session round-trip, FFT sign, known basis coefficients, degeneracy rejection, grid validation, MRS dimensions/units and NIfTI-2 qform geometry. Existing spectroscopy parser/integration and performance tests remain applicable.
+`node --experimental-strip-types scripts/test-spectroscopy-analysis.mts` checks analytical line width, SNR intervals, alignment direction, coupling spacing, complex phase/session round-trip, FFT sign, known basis coefficients, degeneracy rejection, grid validation, MRS dimensions/units and NIfTI-2 qform geometry. `node --experimental-strip-types scripts/test-mrs-support.mts` uses mocked downloads to check optional-file discovery, mismatched and ambiguous bases, request bounds, exact sidecar paths, missing files, and candidate filtering. Existing spectroscopy parser/integration and performance tests remain applicable.
 
 This is functional and numerical regression coverage, not clinical validation. Quantitative concentration estimation, relaxation/tissue corrections, nonlinear metabolite fitting, raw vendor formats, automatic multiplet assignments, and independent anatomical/clinical validation remain outside this implementation.
 
-## Required and optional inputs
 
-One NIfTI-MRS acquisition is sufficient for spectrum display, processing, comparison, quality review and export. Fitting and anatomical localization are optional, collapsed sections. A conventional MRI cannot replace the spectroscopy acquisition.
+## Troubleshooting imports
 
-After loading, NMRView checks the online source in the background without blocking spectrum use. For Zenodo, it reads one record listing, the exact acquisition JSON sidecar if present, and at most three JSON files with “basis” in their names. It loads a basis only if exactly one inspected candidate matches nucleus, frequency (0.1% tolerance), echo time and sequence. Processing and amplitude conventions still require operator verification before fitting. Multiple matches are not automatically selected. Standard basis formats other than `nmrview-basis-1` are not converted.
+| What you see | What to do |
+| --- | --- |
+| No candidates on a search page | Use **Find more records** if available, refine the term, or open a known record ID. The browser checks a bounded page, not every repository record. |
+| A listed NIfTI file is rejected | Verify that it is NIfTI-MRS with complex spectroscopy data and the required header extension. An ordinary MRI NIfTI cannot be displayed as a spectrum. |
+| Missing header units | Consult the acquisition documentation. Confirm seconds/mm only if those units are known; the loader does not assume them silently. |
+| No compatible optional basis found | Continue viewing and processing. Open **Optional: metabolite fitting & maps** only if you have a compatible basis for fitting. |
+| Several bases match | Select the intended basis by its public URL after reviewing the source documentation. NMRView does not guess among matching files. |
+| No anatomical overlay | Load the matching registered scan in the main MRI view and confirm the link in the optional anatomy section. Acquisitions without usable localization cannot show an overlay. |
+| 2D CSV rejected | Check the exact three-column header, uniform rectangular grid, unique coordinate pairs, and finite numeric values. A 1D spectrum belongs in Laboratory NMR. |
 
-For OpenNeuro S3 files, the exact adjacent JSON sidecar is checked; inherited BIDS sidecars and remote basis discovery are not currently resolved. Notes are displayed as formatted metadata and included in review exports; they do not override the acquisition header. Discovery uses the existing repository pacing, a 30-second deadline and bounded downloads. Missing optional files never prevent viewing.
-
-Anatomical scans are not chosen automatically: sharing a repository does not establish participant identity or spatial registration. Load the matching MRI in the main view and confirm its coordinate space in the optional anatomy section.
-
-## Browse acquisitions without direct file URLs
-
-Tissue MRS and 2D NMR include **Browse online acquisitions**. Search Zenodo, open a result, and load a listed file; you can also enter a record ID or URL. Tissue MRS additionally accepts OpenNeuro dataset IDs and lists acquisitions from BIDS `mrs` folders. Large OpenNeuro listings are paged with **More files**. The Laboratory NMR workspace retains its existing repository browser.
-
-Search checks ten Zenodo records per page, reuses results for five minutes, and does not download acquisition files. **Find more records** is explicit; there is no background crawl. File names and sizes filter candidates, and the existing parser validates the selected file during loading. A `.nii.gz` suffix alone does not prove NIfTI-MRS content, and a CSV or JCAMP suffix does not prove a 2D spectrum. Case documentation and license links remain available alongside the file list.
+The public NIfTI-MRS example record `5085449` is a browser-tested starting point. Its `example_10.nii.gz` has missing header units; see the explicit-unit handling described above. Browser QA does not establish acquisition-matched fitting accuracy, complete BIDS support or clinical validity.

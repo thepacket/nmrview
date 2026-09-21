@@ -15,3 +15,17 @@ Do not commit API keys, credentials, patient information, private scans, build o
 Keep pull requests focused and explain the problem, resulting behavior, and validation. New dependencies and sample data must include compatible licensing and attribution. Contributions to original project code are submitted under the project's MIT license; retain third-party notices.
 
 Be respectful and constructive. Do not post identifying clinical information in issues, discussions, screenshots, or logs. Functional tests do not establish clinical validity.
+
+## Spectroscopy changes
+
+Keep the [spectroscopy guide](docs/SPECTROSCOPY.md), the [user guide](docs/USER_GUIDE.md) and README consistent when changing supported formats or workflows. Distinguish filename-based candidates from validated acquisitions. Document numerical assumptions, units, required inputs and optional dependencies; never imply that basis amplitudes are absolute concentrations.
+
+Run focused spectroscopy checks as applicable:
+
+```sh
+node --experimental-strip-types scripts/test-spectroscopy-analysis.mts
+node --experimental-strip-types scripts/test-mrs-support.mts
+node --experimental-strip-types scripts/test-repository-traffic.mts
+```
+
+The supporting-file tests use mocked downloads. Preserve repository pacing, bounded requests, cancellation and explicit pagination; avoid live repository traffic in automated tests. For browser checks, record the public source and tested acquisition, including any explicit unit override. Failed optional-file discovery must not block spectrum viewing, and automatic basis discovery must not bypass compatibility checks or operator confirmation.

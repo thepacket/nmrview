@@ -2,7 +2,7 @@
 
 NMRView takes its name from nuclear magnetic resonance, the physics behind magnetic resonance imaging (MRI). The MRI viewer and NMR spectroscopy workspace share the same application.
 
-A responsive browser workstation for MRI volumes and processed 1D NMR spectra. Research and education use; not validated or certified for diagnosis.
+A responsive browser workstation for MRI volumes, laboratory 1D/2D NMR spectra and tissue MR spectroscopy (MRS). Research and education use; not validated or certified for diagnosis.
 
 ## Run
 
@@ -27,10 +27,10 @@ Keyboard: C locate, W windowing, P pan, D distance, A angle, B draw, E erase, R 
 
 ## Spectroscopy workspace
 
-For the expanded laboratory 1D/2D and tissue MRS workflows, see [Spectroscopy workflows](SPECTROSCOPY.md). The controls below describe the laboratory 1D view.
+For the expanded laboratory 1D/2D and tissue MRS workflows, see [Spectroscopy workflows](SPECTROSCOPY.md). Choose the appropriate tab: **Laboratory NMR** for processed 1D spectra, **2D NMR** for processed grids, or **Tissue MRS** for NIfTI-MRS acquisitions. Switching tabs retains loaded data. The controls below describe the laboratory 1D view.
 
 - Experimental processed 1D JCAMP-DX import, including compressed XY encodings and linked blocks, through the MIT-licensed jcampconverter 9.0.1.
-- Two-column CSV/TSV: chemical shift in ppm and intensity. Optional header. Hz JCAMP axes are converted using observe frequency; ambiguous axes are rejected.
+- Two-column CSV/TSV: chemical shift in ppm and intensity. Optional header. Three-column complex CSV (`ppm,real,imaginary`) enables reversible zero/first-order phase controls. Hz JCAMP axes are converted using observe frequency; ambiguous axes are rejected.
 - Layered overlay or stacked displays; visibility, opacity, color and per-trace gain.
 - Region zoom, pan, wheel/pinch zoom, reversed chemical shift axis and peak-preserving plotting decimation.
 - Manual peak selection and threshold-based local maxima, with a 0.015 ppm minimum separation and 250-peak cap. Review results manually; this is not multiplet fitting.
@@ -51,11 +51,21 @@ Spectra use a compact, cached extrema tree (64-sample blocks) for exact peak-pre
 
 ## Public online repositories
 
-Open **Import scans → Public online repositories**. MRI supports OpenNeuro dataset IDs/URLs and Zenodo record IDs/URLs. Spectroscopy supports Zenodo, including browsing individual JCAMP/CSV/TSV members of ZIP archives. Examples: OpenNeuro `ds000228` (PDDL), Zenodo `4616665` (CC BY 4.0). Source/citation links, authors, license, file sizes, file-name filtering and OpenNeuro pagination are shown before loading. Only open Zenodo records are accepted.
+For MRI and **Laboratory NMR**, open **Import scans → Public online repositories**. MRI supports OpenNeuro dataset IDs/URLs and Zenodo record IDs/URLs. Laboratory 1D NMR supports Zenodo, including browsing individual JCAMP/CSV/TSV members of ZIP archives. Examples: OpenNeuro `ds000228` (PDDL), Zenodo `4616665` (CC BY 4.0). Source/citation links, authors, license, file sizes, file-name filtering and OpenNeuro pagination are shown before loading. Only open Zenodo records are accepted.
 
-Downloads go directly from the repository to the browser with credentials omitted. Progress, cancellation and a five-minute request timeout are provided. Selection limits: 24 files, 512 MB for MRI or 60 MB for spectra. NMR ZIP extraction is asynchronous and limited to 60 MB expanded / 200 compatible entries; choose individual spectra before parsing. Failed downloads do not replace current data. Replace-current-study is on by default; disable it only to add compatible layers. File names retain repository/record identity, and NMR sessions retain source attribution.
+Downloads go directly from the repository to the browser with credentials omitted. The MRI/laboratory 1D importer provides progress, cancellation and a five-minute request timeout. Selection limits: 24 files, 512 MB for MRI or 60 MB for spectra. NMR ZIP extraction is asynchronous and limited to 60 MB expanded / 200 compatible entries; choose individual spectra before parsing. Failed downloads do not replace current data. Replace-current-study is on by default; disable it only to add compatible layers. File names retain repository/record identity, and NMR sessions retain source attribution.
 
 OpenNeuro uses the latest public S3 mirror, **not a pinned historical snapshot**, even when a dataset version URL is supplied. In-app keyword discovery searches OpenNeuro’s public MRI catalog and Zenodo’s open records, with pagination, descriptions, authors and license details. Filters distinguish raw/derivative MRI datasets or Zenodo datasets/all record types. Catalog results are filtered before display. OpenNeuro results require supported volume files in the inspected listings; Zenodo spectra and spectrum ZIPs must pass the 1D parser. Documents, unrelated tables, pathology images, raw FIDs and incompatible archives are excluded. Checks use up to two verification workers behind the shared request pacing queue, with one catalog page of up to ten records per explicit search, one OpenNeuro listing page per record and a 128 MB inspection budget per search. Records that cannot be verified within these limits are omitted; this is not an exhaustive catalog of all potentially compatible data. Compatibility verdicts are cached without retaining scan buffers. Known-ID lookup remains available. MRI ZIP access is described below; other archive formats, authenticated repositories, PACS and DICOMweb are not supported. Repository outages, browser access policies and rate limits can prevent downloads. No server proxy is used.
+
+### Tissue MRS and 2D acquisition browser
+
+In **Tissue MRS** or **2D NMR**, open **Browse online acquisitions**, or use **Import scans** to expand and focus it. Search Zenodo, select a record and click **Load MRS** or **Load 2D spectrum** next to a file. A record ID or record URL also works. Tissue MRS additionally accepts OpenNeuro dataset IDs/URLs and lists NIfTI files from BIDS `mrs` folders. **More files** advances through large OpenNeuro listings. Source documentation and license links appear with each opened record.
+
+These separate browsers filter by filename and size, then validate the selected file's contents on import; they do not use the laboratory 1D parser during search. Zenodo searches inspect ten records per page and reuse results for five minutes. **Find more records** requests another page explicitly. Search does not download acquisitions. Archives and raw vendor formats are excluded; a candidate extension alone does not establish compatibility.
+
+Tissue MRS allows 64 MB downloads / 128 MB expanded; processed 2D allows 32 MB / one million cells. Repository lookups have a 30-second deadline; acquisition imports have a 60-second deadline. Direct public download URLs remain an alternative. An invalid import leaves the previously loaded spectrum available.
+
+No additional files are needed to view, phase, compare, review quality or export a tissue-MRS spectrum. Optional fitting requires an acquisition-matched `nmrview-basis-1` basis; anatomical localization requires matching registered MRI anatomy and operator confirmation. The source is checked for optional acquisition notes and matching Zenodo basis files in the background. See [required and optional inputs](SPECTROSCOPY.md#required-and-optional-inputs) for discovery limits, including unsupported inherited BIDS sidecars.
 
 ## Data and privacy
 
@@ -73,9 +83,11 @@ Software: NiiVue (BSD-2-Clause), dcm2niix (BSD and notices in its distribution),
 - `npm run typecheck`
 - `npm test`: analytical integration, reversed CSV, chemical-shift offsets, baseline, peak detection, peak-preserving decimation, malformed inputs, three real experimental JCAMP files and JSON session round-trip.
 - `python3 scripts/make-dicom-fixture.py`: creates an anonymous synthetic three-slice series in `/tmp/nmrview-dicom-test`. Import all three files in the MRI workspace. Expected dimensions: 32 × 32 × 3; spacing: 1 × 2 × 3 mm.
+- `node --experimental-strip-types scripts/test-spectroscopy-analysis.mts`: spectroscopy processing, quality, geometry, basis fitting and map regressions.
+- `node --experimental-strip-types scripts/test-mrs-support.mts`: mocked optional-file discovery, matching, ambiguity, request limits and acquisition candidate filtering.
 - `npm run build`
 
-Browser QA covered DICOM fixture conversion with expected geometry, rendering the MNI volume, layered T1/T2/gray-matter controls, distance recording, NMR overlay/stacked views, peak detection and integration, import workflows and desktop/mobile breakpoints. This is functional QA, not clinical validation, an exhaustive DICOM conformance suite, or testing on physical mobile devices.
+Browser QA covered DICOM fixture conversion with expected geometry, rendering the MNI volume, layered T1/T2/gray-matter controls, distance recording, NMR overlay/stacked views, peak detection and integration, import workflows and desktop/mobile breakpoints. The tissue-MRS browser was also checked against the public NIfTI-MRS example record, including search, direct file-list loading and preservation of the displayed spectrum after an invalid import. This is functional QA, not clinical validation, an exhaustive DICOM conformance suite, or testing on physical mobile devices.
 
 The optional WebMCP tools `read_workspace` and `set_workspace` are feature-detected and share the UI's active workspace. Valid switching and invalid input were checked in a supported browser.
 
