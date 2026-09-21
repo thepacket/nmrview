@@ -23,7 +23,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  discoverMRSSupport,
+  type MRSSupport,
+} from "@/lib/nmr/supporting-files";
 export function MRSWorkspace({ active }: { active: boolean }) {
+  const [support, setSupport] = useState<MRSSupport | null>(null);
+  const [supportStatus, setSupportStatus] = useState("");
   const [qualityReview, setQualityReview] = useState<{
     key: string;
     report: object;
@@ -88,6 +94,44 @@ export function MRSWorkspace({ active }: { active: boolean }) {
       stale = true;
     };
   }, [info, selection, p, baseline]);
+  useEffect(() => {
+    setSupport(null);
+    if (!info) {
+      setSupportStatus("");
+      return;
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    let current = true;
+    setSupportStatus(
+      "Checking the source for optional acquisition notes and a matching basis…",
+    );
+    discoverMRSSupport(info, controller.signal)
+      .then((found) => {
+        if (!current) return;
+        setSupport(found);
+        setSupportStatus(found.message);
+        if (found.basis) {
+          setBasis(found.basis);
+          setBasisURL(found.basisURL || "");
+          setComponent(found.basis.components[0].name);
+          setDenominator("");
+          setFitConfirmed(false);
+        }
+      })
+      .catch(() => {
+        if (current)
+          setSupportStatus(
+            "Optional file lookup could not finish. Your spectrum is still available; you can supply a basis below.",
+          );
+      })
+      .finally(() => clearTimeout(timeout));
+    return () => {
+      current = false;
+      controller.abort();
+      clearTimeout(timeout);
+    };
+  }, [info]);
   async function load() {
     abort.current?.abort();
     const a = new AbortController();
@@ -123,6 +167,7 @@ export function MRSWorkspace({ active }: { active: boolean }) {
       setBaseline(false);
       setFit(null);
       setBasis(null);
+      setBasisURL("");
       setFitConfirmed(false);
       setInfo(data);
       setRange(data.nucleus === "1H" ? [0, 5] : [-20, 20]);
@@ -314,6 +359,8 @@ export function MRSWorkspace({ active }: { active: boolean }) {
     );
   }
   const metadata = {
+    supportingDocumentation: support?.notes,
+    supportingDocumentationURL: support?.notesURL,
     acquisition: info,
     comparisons: pinMetadata,
     selection,
@@ -440,6 +487,11 @@ export function MRSWorkspace({ active }: { active: boolean }) {
               direct download URL. Complex data are processed in your browser.
             </p>
             <p>
+              Only the NIfTI-MRS acquisition is required to view, phase, compare
+              and export spectra. A basis set is optional for metabolite
+              fitting; a matching MRI is optional for anatomical localization.
+            </p>
+            <p>
               Coils, dynamics and editing conditions are selected individually;
               they are never silently averaged.
             </p>
@@ -515,17 +567,24 @@ export function MRSWorkspace({ active }: { active: boolean }) {
           </section>
         )}
         {info && (
-          <MRSAnatomy
-            key={info.source + info.name}
-            info={info}
-            selection={selection}
-            map={map}
-          />
+          <details>
+            <summary>Optional: show voxel on matching MRI anatomy</summary>
+            <MRSAnatomy
+              key={info.source + info.name}
+              info={info}
+              selection={selection}
+              map={map}
+            />
+          </details>
         )}
       </div>
       <aside className="mrs-controls">
         <section>
-          <h3>Online acquisition</h3>
+          <h3>1. Load a spectrum</h3>
+          <p className="hint">
+            Required: one NIfTI-MRS file. Ordinary MRI images do not contain
+            spectroscopy signals.
+          </p>
           <label>
             Direct .nii / .nii.gz URL
             <input
@@ -587,6 +646,25 @@ export function MRSWorkspace({ active }: { active: boolean }) {
         </section>
         {info && (
           <>
+            <section aria-label="Spectroscopy readiness">
+              <h3>{spectrum ? "Spectrum ready" : "Acquisition loaded"}</h3>
+              <p className="hint">
+                No additional files are needed for viewing, processing, quality
+                review or export.
+              </p>
+              <p role="status" className="hint">
+                {supportStatus}
+              </p>
+              {support?.notesURL && (
+                <details>
+                  <summary>Acquisition notes</summary>
+                  <MetadataValue value={support.notes} />
+                  <a href={support.notesURL} target="_blank" rel="noreferrer">
+                    Source documentation
+                  </a>
+                </details>
+              )}
+            </section>
             <section>
               <h3>Voxel & acquisition</h3>
               {selection.map((v, i) => {
@@ -693,8 +771,17 @@ export function MRSWorkspace({ active }: { active: boolean }) {
                 coil combination is applied.
               </p>
             </section>
-            <section>
-              <h3>Acquisition-matched basis fit</h3>
+            <details>
+              <summary>
+                Optional: metabolite fitting & maps
+                {basis ? " · basis loaded" : " · basis needed"}
+              </summary>
+              <p className="hint">
+                Add reference metabolite signals only if you want fitting or
+                maps. Your spectrum works without them. NMRView checks up to
+                three named basis JSON files in the source Zenodo record
+                automatically.
+              </p>
               <label>
                 Online basis JSON URL
                 <input
@@ -705,7 +792,9 @@ export function MRSWorkspace({ active }: { active: boolean }) {
               </label>
               <button
                 className="btn"
-                disabled={!basisURL || !!busy}
+                disabled={
+                  !basisURL || !!busy || supportStatus.startsWith("Checking")
+                }
                 onClick={loadBasis}
               >
                 Load basis
@@ -819,7 +908,7 @@ export function MRSWorkspace({ active }: { active: boolean }) {
                   </button>
                 </>
               )}
-            </section>
+            </details>
             <section>
               <h3>Review export</h3>
               <button

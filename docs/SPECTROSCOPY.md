@@ -74,3 +74,13 @@ The existing AI attachment workflow now accepts visible 1D/2D spectra, tissue-MR
 `node --experimental-strip-types scripts/test-spectroscopy-analysis.mts` checks analytical line width, SNR intervals, alignment direction, coupling spacing, complex phase/session round-trip, FFT sign, known basis coefficients, degeneracy rejection, grid validation, MRS dimensions/units and NIfTI-2 qform geometry. Existing spectroscopy parser/integration and performance tests remain applicable.
 
 This is functional and numerical regression coverage, not clinical validation. Quantitative concentration estimation, relaxation/tissue corrections, nonlinear metabolite fitting, raw vendor formats, automatic multiplet assignments, and independent anatomical/clinical validation remain outside this implementation.
+
+## Required and optional inputs
+
+One NIfTI-MRS acquisition is sufficient for spectrum display, processing, comparison, quality review and export. Fitting and anatomical localization are optional, collapsed sections. A conventional MRI cannot replace the spectroscopy acquisition.
+
+After loading, NMRView checks the online source in the background without blocking spectrum use. For Zenodo, it reads one record listing, the exact acquisition JSON sidecar if present, and at most three JSON files with “basis” in their names. It loads a basis only if exactly one inspected candidate matches nucleus, frequency (0.1% tolerance), echo time and sequence. Processing and amplitude conventions still require operator verification before fitting. Multiple matches are not automatically selected. Standard basis formats other than `nmrview-basis-1` are not converted.
+
+For OpenNeuro S3 files, the exact adjacent JSON sidecar is checked; inherited BIDS sidecars and remote basis discovery are not currently resolved. Notes are displayed as formatted metadata and included in review exports; they do not override the acquisition header. Discovery uses the existing repository pacing, a 30-second deadline and bounded downloads. Missing optional files never prevent viewing.
+
+Anatomical scans are not chosen automatically: sharing a repository does not establish participant identity or spatial registration. Load the matching MRI in the main view and confirm its coordinate space in the optional anatomy section.

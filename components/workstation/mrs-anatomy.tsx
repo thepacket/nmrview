@@ -129,6 +129,8 @@ export function MRSAnatomy({
     <section>
       <h3>Anatomical location</h3>
       <p className="hint">
+        Optional: load the matching anatomical scan in the main MRI view, then
+        confirm it below. No MRI is needed to inspect or process the spectrum.
         Only link the same participant and coordinate space. No registration is
         performed. The overlay shows the encoded voxel extent, not the
         excitation profile.
