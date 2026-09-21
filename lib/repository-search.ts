@@ -212,81 +212,44 @@ async function searchUncached(
   signal: AbortSignal,
   cursor?: string,
   mode: "mri" | "nmr" = "mri",
+  onProgress?: (result: DatasetResults) => void,
 ): Promise<DatasetResults> {
   const { compatibleFiles } = await import("./repository-compatibility.ts");
-  let next = cursor;
+  const result = await searchPage(
+    provider,
+    term,
+    filter,
+    AbortSignal.any([signal, AbortSignal.timeout(10000)]),
+    cursor,
+    mode,
+  );
+  // Bound the whole verification phase, rather than adding ten per-record waits.
+  const verificationSignal = AbortSignal.any([
+    signal,
+    AbortSignal.timeout(15000),
+  ]);
   const budget = { remaining: 128 * 1024 * 1024 };
-  let checked = 0;
-  let catalogTotal: number | undefined;
-  const excluded = { archives: 0, unsupported: 0, oversized: 0, unchecked: 0 };
-  // One catalog page per explicit user request.
-  for (let page = 0; page < 1; page++) {
-    const result = await searchPage(provider, term, filter, signal, next, mode);
-    checked += result.hits.length;
-    catalogTotal = result.total;
+  const outcomes = new Map<number, boolean>();
+  const failed = new Set<number>();
+  const snapshot = (): DatasetResults => {
+    const excluded = {
+      archives: 0,
+      unsupported: 0,
+      oversized: 0,
+      unchecked: failed.size,
+    };
     const hits: DatasetHit[] = [];
-    let index = 0;
-    const outcomes: boolean[] = [];
-    const failed = new Set<number>();
-    await Promise.all(
-      Array.from({ length: Math.min(1, result.hits.length) }, async () => {
-        while (index < result.hits.length) {
-          const i = index++,
-            hit = result.hits[i];
-          try {
-            // A slow archive must not hold the entire catalog search open.
-            const checkSignal =
-              mode === "mri"
-                ? AbortSignal.any([signal, AbortSignal.timeout(10000)])
-                : signal;
-            if (provider === "zenodo")
-              outcomes[i] =
-                (
-                  await compatibleFiles(
-                    hit.files || [],
-                    mode,
-                    checkSignal,
-                    true,
-                    budget,
-                  )
-                ).length > 0;
-            else {
-              let token: string | undefined;
-              for (let p = 0; p < 1; p++) {
-                const record = await browseRepository(
-                  provider,
-                  hit.id,
-                  mode,
-                  signal,
-                  token,
-                );
-                if (
-                  (await compatibleFiles(record.files, mode, signal, true))
-                    .length
-                ) {
-                  outcomes[i] = true;
-                  break;
-                }
-                token = record.next;
-                if (!token) break;
-              }
-            }
-          } catch (error) {
-            if (error instanceof RepositoryRateLimitError) throw error;
-            excluded.unchecked++;
-            failed.add(i);
-            signal.throwIfAborted();
-          }
-        }
-      }),
-    );
     result.hits.forEach((hit, i) => {
-      if (
-        !outcomes[i] &&
-        !failed.has(i) &&
-        provider === "zenodo" &&
-        mode === "mri"
-      ) {
+      if (!outcomes.has(i)) return;
+      if (outcomes.get(i)) {
+        hits.push({
+          ...hit,
+          compatibility:
+            mode === "nmr"
+              ? "Validated 1D spectra available"
+              : "Supported volume files available",
+        });
+      } else if (provider === "zenodo" && mode === "mri") {
         const files = hit.files || [];
         if (
           files.some(
@@ -304,19 +267,76 @@ async function searchUncached(
           excluded.archives++;
         else excluded.unsupported++;
       }
-      if (outcomes[i])
-        hits.push({
-          ...hit,
-          compatibility:
-            mode === "nmr"
-              ? "Validated 1D spectra available"
-              : "Supported volume files available",
-        });
     });
-    next = result.next;
-    return { hits, next, checked, excluded, catalogTotal };
+    return {
+      hits,
+      next: result.next,
+      checked: outcomes.size + failed.size,
+      excluded,
+      catalogTotal: result.total,
+    };
+  };
+  // Resolve filename-only MRI checks first, without waiting behind network probes.
+  const pending: number[] = [];
+  for (let i = 0; i < result.hits.length; i++) {
+    const files = result.hits[i].files || [];
+    if (provider === "zenodo" && mode === "mri") {
+      const direct = files.filter((f) => !/\.zip$/i.test(f.name));
+      const supported =
+        (await compatibleFiles(direct, mode, signal, true)).length > 0;
+      if (supported || !files.some((f) => /\.zip$/i.test(f.name))) {
+        outcomes.set(i, supported);
+        continue;
+      }
+    }
+    pending.push(i);
   }
-  return { hits: [], next, checked, excluded, catalogTotal };
+  onProgress?.(snapshot());
+  let index = 0;
+  const workers = new AbortController();
+  try {
+    await Promise.all(
+      Array.from({ length: Math.min(2, pending.length) }, async () => {
+        while (index < pending.length) {
+          signal.throwIfAborted();
+          workers.signal.throwIfAborted();
+          const i = pending[index++];
+          if (verificationSignal.aborted) {
+            failed.add(i);
+            continue;
+          }
+          const hit = result.hits[i];
+          const checkSignal = AbortSignal.any([
+            verificationSignal,
+            workers.signal,
+            AbortSignal.timeout(6000),
+          ]);
+          try {
+            const files =
+              provider === "zenodo"
+                ? hit.files || []
+                : (await browseRepository(provider, hit.id, mode, checkSignal))
+                    .files;
+            outcomes.set(
+              i,
+              (await compatibleFiles(files, mode, checkSignal, true, budget))
+                .length > 0,
+            );
+          } catch (error) {
+            if (error instanceof RepositoryRateLimitError) throw error;
+            signal.throwIfAborted();
+            workers.signal.throwIfAborted();
+            failed.add(i);
+          }
+          onProgress?.(snapshot());
+        }
+      }),
+    );
+  } finally {
+    workers.abort();
+  }
+  signal.throwIfAborted();
+  return snapshot();
 }
 
 // Cache completed discovery only; errors and cancelled runs remain retryable.
@@ -328,6 +348,7 @@ export async function searchDatasets(
   signal: AbortSignal,
   cursor?: string,
   mode: "mri" | "nmr" = "mri",
+  onProgress?: (result: DatasetResults) => void,
 ): Promise<DatasetResults> {
   signal.throwIfAborted();
   const key = JSON.stringify([provider, term.trim(), filter, cursor, mode]);
@@ -341,6 +362,7 @@ export async function searchDatasets(
     signal,
     cursor,
     mode,
+    onProgress,
   );
   signal.throwIfAborted();
   if (!result.excluded?.unchecked) {

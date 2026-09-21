@@ -30,43 +30,49 @@ export function RepositoryCatalog({
     if (controller.current) return;
     const abort = new AbortController();
     controller.current = abort;
-    const timer = setTimeout(() => abort.abort(), 180000);
+    const timer = setTimeout(() => abort.abort(), 30000);
     setBusy(true);
     setError("");
     const request = more ? last.current : { term, filter };
+    last.current = request;
+    const previous = more ? results : null;
+    if (!more) setResults(null);
+    const display = (next: DatasetResults) => {
+      if (abort.signal.aborted) return;
+      setResults(
+        more
+          ? {
+              ...next,
+              checked: (previous?.checked || 0) + (next.checked || 0),
+              excluded: next.excluded
+                ? (Object.fromEntries(
+                    Object.entries(next.excluded).map(([key, value]) => [
+                      key,
+                      value +
+                        (previous?.excluded?.[
+                          key as keyof NonNullable<DatasetResults["excluded"]>
+                        ] || 0),
+                    ]),
+                  ) as DatasetResults["excluded"])
+                : undefined,
+              hits: [...(previous?.hits || []), ...next.hits].filter(
+                (hit, i, all) => all.findIndex((h) => h.id === hit.id) === i,
+              ),
+            }
+          : next,
+      );
+    };
     try {
       const next = await searchDatasets(
         provider,
         request.term,
         request.filter,
         abort.signal,
-        more ? results?.next : undefined,
+        more ? previous?.next : undefined,
         mode,
+        display,
       );
-      if (abort.signal.aborted) return;
-      last.current = request;
-      setResults(
-        more
-          ? {
-              ...next,
-              checked: (results?.checked || 0) + (next.checked || 0),
-              excluded: next.excluded
-                ? (Object.fromEntries(
-                    Object.entries(next.excluded).map(([key, value]) => [
-                      key,
-                      value +
-                        (results?.excluded?.[
-                          key as keyof NonNullable<DatasetResults["excluded"]>
-                        ] || 0),
-                    ]),
-                  ) as DatasetResults["excluded"])
-                : undefined,
-              hits: [...(results?.hits || []), ...next.hits].filter(
-                (hit, i, all) => all.findIndex((h) => h.id === hit.id) === i,
-              ),
-            }
-          : next,
-      );
+      display(next);
     } catch (e) {
       setError(
         abort.signal.aborted
@@ -144,7 +150,8 @@ export function RepositoryCatalog({
       </form>
       {busy && (
         <div role="status">
-          Checking compatible datasets…{" "}
+          Checking compatible datasets… verified results appear below as they
+          arrive.{" "}
           <button
             className="btn small"
             onClick={() => controller.current?.abort()}
@@ -205,8 +212,11 @@ export function RepositoryCatalog({
                 <div className="full-row">
                   <button
                     className="btn"
-                    disabled={busy || disabled}
-                    onClick={() => onChoose(hit.id)}
+                    disabled={disabled}
+                    onClick={() => {
+                      controller.current?.abort();
+                      onChoose(hit.id);
+                    }}
                   >
                     Browse files · {hit.id}
                   </button>

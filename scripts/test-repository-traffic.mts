@@ -21,6 +21,35 @@ try {
     starts[1] - starts[0] >= 20 && starts[2] - starts[1] >= 20,
     "request starts are paced",
   );
+  const queued = createRepositoryTraffic(0);
+  let releaseFirst!: (response: Response) => void;
+  const sent: string[] = [];
+  globalThis.fetch = async (url) => {
+    sent.push(String(url));
+    if (sent.length === 1)
+      return new Promise<Response>((resolve) => {
+        releaseFirst = resolve;
+      });
+    return new Response("ok");
+  };
+  const first = queued.fetch("https://zenodo.org/first");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const cancelled = new AbortController();
+  const second = queued.fetch("https://zenodo.org/cancelled", {
+    signal: cancelled.signal,
+  });
+  cancelled.abort();
+  await assert.rejects(second, /abort/i);
+  const third = queued.fetch("https://zenodo.org/third");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(
+    sent.length,
+    1,
+    "cancelled waiter cannot let later requests jump the queue",
+  );
+  releaseFirst(new Response("ok"));
+  await Promise.all([first, third]);
+  assert.equal(sent.length, 2);
   let now = 100000,
     calls = 0;
   const cooldown = createRepositoryTraffic(0, () => now);

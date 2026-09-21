@@ -20,7 +20,20 @@ export function createRepositoryTraffic(interval = 1000, now = Date.now) {
       release = resolve;
     });
     try {
-      await previous;
+      await new Promise<void>((resolve, reject) => {
+        const signal = init.signal;
+        const abort = () =>
+          reject(signal?.reason || new DOMException("Cancelled", "AbortError"));
+        if (signal?.aborted) {
+          abort();
+          return;
+        }
+        signal?.addEventListener("abort", abort, { once: true });
+        previous.then(() => {
+          signal?.removeEventListener("abort", abort);
+          resolve();
+        });
+      });
       init.signal?.throwIfAborted();
       const check = () => {
         if (state!.blocked > now())
@@ -67,7 +80,8 @@ export function createRepositoryTraffic(interval = 1000, now = Date.now) {
       }
       return response;
     } finally {
-      release();
+      // A cancelled waiter returns promptly without letting later requests jump the queue.
+      void previous.then(release);
     }
   }
   return { fetch: fetchRepository };
