@@ -19,6 +19,10 @@ export default function SpectroscopyWorkbench(
         ? '[aria-label="Tissue MR spectroscopy"]'
         : '[aria-label="2D laboratory NMR"]',
     );
+    const browser = section?.querySelector<HTMLDetailsElement>(
+      ".spectroscopy-browser",
+    );
+    if (browser) browser.open = true;
     const input = section?.querySelector<HTMLInputElement>(
       ".mrs-controls input",
     );

@@ -84,3 +84,9 @@ After loading, NMRView checks the online source in the background without blocki
 For OpenNeuro S3 files, the exact adjacent JSON sidecar is checked; inherited BIDS sidecars and remote basis discovery are not currently resolved. Notes are displayed as formatted metadata and included in review exports; they do not override the acquisition header. Discovery uses the existing repository pacing, a 30-second deadline and bounded downloads. Missing optional files never prevent viewing.
 
 Anatomical scans are not chosen automatically: sharing a repository does not establish participant identity or spatial registration. Load the matching MRI in the main view and confirm its coordinate space in the optional anatomy section.
+
+## Browse acquisitions without direct file URLs
+
+Tissue MRS and 2D NMR include **Browse online acquisitions**. Search Zenodo, open a result, and load a listed file; you can also enter a record ID or URL. Tissue MRS additionally accepts OpenNeuro dataset IDs and lists acquisitions from BIDS `mrs` folders. Large OpenNeuro listings are paged with **More files**. The Laboratory NMR workspace retains its existing repository browser.
+
+Search checks ten Zenodo records per page, reuses results for five minutes, and does not download acquisition files. **Find more records** is explicit; there is no background crawl. File names and sizes filter candidates, and the existing parser validates the selected file during loading. A `.nii.gz` suffix alone does not prove NIfTI-MRS content, and a CSV or JCAMP suffix does not prove a 2D spectrum. Case documentation and license links remain available alongside the file list.

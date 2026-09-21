@@ -14,6 +14,7 @@ import { captureScanSource, availableScanSources } from "@/lib/assistant/scan";
 import { MetadataValue } from "./case-documentation";
 import { zipSync, strToU8 } from "fflate";
 import { downloadBlob } from "./controls";
+import { SpectroscopyBrowser } from "./spectroscopy-browser";
 import { MRSPlot } from "./mrs-plot";
 import { MRSAnatomy } from "./mrs-anatomy";
 import { SpectrumReview } from "./spectrum-review";
@@ -132,7 +133,7 @@ export function MRSWorkspace({ active }: { active: boolean }) {
       clearTimeout(timeout);
     };
   }, [info]);
-  async function load() {
+  async function load(sourceURL = url) {
     abort.current?.abort();
     const a = new AbortController();
     abort.current = a;
@@ -141,15 +142,15 @@ export function MRSWorkspace({ active }: { active: boolean }) {
     setError("");
     let next: MRSClient | null = null;
     try {
-      const blob = await downloadPublic(url, 64 * 1024 * 1024, a.signal);
+      const blob = await downloadPublic(sourceURL, 64 * 1024 * 1024, a.signal);
       next = new MRSClient();
       const data = await next.load(
         blob,
-        new URL(url).pathname
+        new URL(sourceURL).pathname
           .split("/")
           .filter((v) => v !== "content")
           .pop() || "MRS",
-        url,
+        sourceURL,
         assumeUnits,
       );
       client.current?.dispose();
@@ -483,8 +484,9 @@ export function MRSWorkspace({ active }: { active: boolean }) {
           <div className="mrs-empty">
             <h2>Inspect spatially localized spectra</h2>
             <p>
-              Load a public NIfTI-MRS file from Zenodo or OpenNeuro S3 using its
-              direct download URL. Complex data are processed in your browser.
+              Browse public NIfTI-MRS acquisitions on Zenodo or OpenNeuro, or
+              enter a direct download URL. Complex data are processed in your
+              browser.
             </p>
             <p>
               Only the NIfTI-MRS acquisition is required to view, phase, compare
@@ -581,6 +583,14 @@ export function MRSWorkspace({ active }: { active: boolean }) {
       <aside className="mrs-controls">
         <section>
           <h3>1. Load a spectrum</h3>
+          <SpectroscopyBrowser
+            kind="mrs"
+            disabled={!!busy}
+            onLoad={(address) => {
+              setUrl(address);
+              void load(address);
+            }}
+          />
           <p className="hint">
             Required: one NIfTI-MRS file. Ordinary MRI images do not contain
             spectroscopy signals.
@@ -608,7 +618,7 @@ export function MRSWorkspace({ active }: { active: boolean }) {
             <button
               className="btn primary"
               disabled={!url || !!busy}
-              onClick={load}
+              onClick={() => load()}
             >
               Load MRS
             </button>

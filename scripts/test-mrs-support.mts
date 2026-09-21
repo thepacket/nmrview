@@ -78,3 +78,29 @@ assert.equal(result.basis, undefined);
 console.log(
   "MRS optional-file discovery: matching, ambiguity, bounded requests, sidecars and missing files passed.",
 );
+
+const { spectroscopyCandidates } = await import("../lib/nmr/catalog.ts");
+const candidates = [
+  {
+    name: "ds000001/sub-01/mrs/sub-01_mrs.nii.gz",
+    url: "https://s3.amazonaws.com/openneuro.org/ds000001/sub-01/mrs/sub-01_mrs.nii.gz",
+    size: 100,
+  },
+  {
+    name: "ds000001/sub-01/anat/sub-01_T1w.nii.gz",
+    url: "https://example.org/anat",
+    size: 100,
+  },
+  { name: "big.nii", url: "https://example.org/big", size: 65 * 1024 * 1024 },
+  { name: "spectra.zip", url: "https://example.org/zip", size: 100 },
+  { name: "2d.csv", url: "https://example.org/csv", size: 100 },
+];
+assert.equal(spectroscopyCandidates(candidates, "mrs", true).length, 1);
+assert.equal(spectroscopyCandidates(candidates, "mrs").length, 2);
+assert.deepEqual(
+  spectroscopyCandidates(candidates, "2d").map((f) => f.name),
+  ["2d.csv"],
+);
+console.log(
+  "Spectroscopy catalog excludes anatomy in BIDS, archives and oversized files.",
+);

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { SpectroscopyBrowser } from "./spectroscopy-browser";
 import Worker from "@/lib/nmr/two-d.worker?worker";
 import type { Spectrum2D } from "@/lib/nmr/two-d";
 import { downloadPublic } from "@/lib/repositories";
@@ -28,7 +29,7 @@ export function TwoDSpectra({ active }: { active: boolean }) {
     },
     [],
   );
-  async function load() {
+  async function load(sourceURL = url) {
     const a = new AbortController();
     abort.current = a;
     setBusy(true);
@@ -40,7 +41,7 @@ export function TwoDSpectra({ active }: { active: boolean }) {
       setError("2D import timed out.");
     }, 60000);
     try {
-      const blob = await downloadPublic(url, 32 * 1024 * 1024, a.signal);
+      const blob = await downloadPublic(sourceURL, 32 * 1024 * 1024, a.signal);
       const w = new Worker();
       worker.current = w;
       w.onmessage = ({ data: r }) => {
@@ -63,8 +64,8 @@ export function TwoDSpectra({ active }: { active: boolean }) {
       };
       w.postMessage({
         file: blob,
-        name: new URL(url).pathname.split("/").pop(),
-        source: url,
+        name: new URL(sourceURL).pathname.split("/").pop(),
+        source: sourceURL,
       });
     } catch (e) {
       if (timer.current) clearTimeout(timer.current);
@@ -209,6 +210,14 @@ export function TwoDSpectra({ active }: { active: boolean }) {
         {busy && <p role="status">Loading 2D spectrum…</p>}
       </div>
       <aside className="mrs-controls">
+        <SpectroscopyBrowser
+          kind="2d"
+          disabled={busy}
+          onLoad={(address) => {
+            setUrl(address);
+            void load(address);
+          }}
+        />
         <section>
           <label>
             Public spectrum URL
@@ -221,7 +230,7 @@ export function TwoDSpectra({ active }: { active: boolean }) {
           <button
             className="btn primary"
             disabled={!url || busy}
-            onClick={load}
+            onClick={() => load()}
           >
             Load 2D spectrum
           </button>
