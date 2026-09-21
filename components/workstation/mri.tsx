@@ -1,4 +1,5 @@
 "use client";
+import { registerAssistantViewer } from "@/lib/assistant/viewer";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Brain,
@@ -108,6 +109,9 @@ export default function MRIWorkspace({
   active: boolean;
   importTick: number;
 }) {
+  const [assistantRecord, setAssistantRecord] = useState<
+    { provider: string; id: string } | undefined
+  >();
   const [collection, setCollection] = useState<StudyCollection | null>(null);
   const [comparing, setComparing] = useState(false);
   const comparingRef = useRef(comparing);
@@ -394,6 +398,91 @@ export default function MRIWorkspace({
     const m = n.frac2mm(p);
     setMM(Array.from(m).slice(0, 3));
   }
+  useEffect(
+    () =>
+      registerAssistantViewer({
+        openRecord: (provider, id) => {
+          setAssistantRecord({ provider, id });
+          setShowImport(true);
+        },
+        context: () => ({
+          view: comparing
+            ? "comparison (actions target main viewer only)"
+            : "main",
+          layout,
+          sampling: nearest ? "native" : "smooth",
+          layers: layers.map(({ name, dims, spacing, frames }) => ({
+            name,
+            dims,
+            spacing,
+            frames,
+          })),
+          documentation: documentation
+            ? {
+                title: documentation.title,
+                source: documentation.source,
+                license: documentation.license,
+                sections: documentation.sections
+                  .map((s) => ({ title: s.title, text: s.text.slice(0, 2000) }))
+                  .slice(0, 4),
+              }
+            : null,
+        }),
+        apply: (action) => {
+          if (busy || !nv.current)
+            throw new Error("Wait for the MRI viewer to finish loading.");
+          if (action.kind === "open_import") {
+            setShowImport(true);
+            return () => setShowImport(false);
+          }
+          if (action.kind === "case_notes") {
+            if (!documentation) throw new Error("No case notes are loaded.");
+            setNotesOpen(true);
+            return () => setNotesOpen(false);
+          }
+          if (comparing)
+            throw new Error(
+              "Return to the main viewer before applying this display change.",
+            );
+          const n = nv.current;
+          if (action.kind === "layout") {
+            const value = String(
+              { axial: 0, coronal: 1, sagittal: 2, multiplanar: 3, volume: 4 }[
+                action.plane
+              ],
+            );
+            setLayout(value);
+            controller.current?.setLayout(Number(value));
+            return () => {
+              setLayout(layout);
+              controller.current?.setLayout(Number(layout));
+            };
+          }
+          if (action.kind === "sampling") {
+            setNearest(action.mode === "native");
+            n.setInterpolation(action.mode === "native");
+            return () => {
+              setNearest(nearest);
+              n.setInterpolation(nearest);
+            };
+          }
+          if (action.kind === "fit") {
+            const before = controller.current?.capture(false);
+            const volume = n.volumes[0];
+            controller.current?.fit();
+            return () => {
+              if (nv.current !== n || n.volumes[0] !== volume)
+                throw new Error(
+                  "The scan changed; this undo no longer applies.",
+                );
+              if (before) controller.current?.restore(before);
+            };
+          }
+          throw new Error("Unsupported viewer action.");
+        },
+      }),
+    [layout, nearest, layers, documentation, comparing, busy],
+  );
   function reset() {
     const n = nv.current;
     if (!n) return;
@@ -1630,6 +1719,12 @@ export default function MRIWorkspace({
           </DialogDescription>
           <div className="dialog-body">
             <RepositoryBrowser
+              key={
+                assistantRecord
+                  ? `${assistantRecord.provider}:${assistantRecord.id}`
+                  : "manual"
+              }
+              initialRecord={assistantRecord}
               mode="mri"
               onDocumentation={setDocumentation}
               onCollection={(value) => {

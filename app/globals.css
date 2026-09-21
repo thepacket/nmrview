@@ -1857,3 +1857,19 @@ button svg {
     min-height: max(500px, 65dvh);
   }
 }
+
+/* Assistant has its own track: images resize and remain unobscured. */
+.workspace-body {display:flex;flex:1;min-height:0;min-width:0;overflow:hidden;}
+.image-workspaces {display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;}
+.assistant-panel {width:360px;max-width:40vw;flex-shrink:0;display:flex;flex-direction:column;gap:10px;padding:14px;border-left:1px solid #34434b;background:#10191e;min-height:0;overflow:auto;font-size:13px;}
+.assistant-panel .field {width:100%;min-width:0;}
+.assistant-panel label {display:block;margin:7px 0;}
+.assistant-panel h2 {font-size:17px;margin:0;flex:1;}
+.assistant-settings {flex-shrink:0;}
+.assistant-log {flex:1;min-height:100px;overflow:auto;overflow-wrap:anywhere;}
+.assistant-message {padding:10px 0;border-bottom:1px solid #34434b;}
+.assistant-message p {white-space:pre-wrap;}
+.assistant-message small {display:block;color:#9caeb6;}
+.assistant-message.user {color:#b4d9d2;}
+.assistant-context {max-height:160px;overflow:auto;white-space:pre-wrap;font-size:11px;}
+@media(max-width:800px){.workspace-body:has(.assistant-panel){flex-direction:column;}.assistant-panel{width:100%;max-width:none;height:42dvh;min-height:220px;border-left:0;border-top:1px solid #34434b;}.workspace-body:has(.assistant-panel) .image-workspaces{min-height:180px;}.header-actions{flex-wrap:wrap;}}

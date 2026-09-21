@@ -28,17 +28,19 @@ export function RepositoryBrowser({
   onLoad,
   onCollection,
   onDocumentation,
+  initialRecord,
 }: {
   mode: "mri" | "nmr";
+  initialRecord?: { provider: string; id: string };
   onLoad: (files: File[], source: string, replace: boolean) => Promise<void>;
   onCollection?: (collection: StudyCollection) => void;
   onDocumentation?: (doc: CaseDocumentation) => void;
 }) {
-  const [provider, setProvider] = useState("zenodo");
-  const [catalogTerm, setCatalogTerm] = useState(
-    mode === "mri" ? "" : "NMR",
+  const [provider, setProvider] = useState(initialRecord?.provider || "zenodo");
+  const [catalogTerm, setCatalogTerm] = useState(mode === "mri" ? "" : "NMR");
+  const [input, setInput] = useState(
+    initialRecord?.id || (mode === "mri" ? "14934086" : "4616665"),
   );
-  const [input, setInput] = useState(mode === "mri" ? "14934086" : "4616665");
   const [record, setRecord] = useState<RepositoryRecord | null>(null);
   const [query, setQuery] = useState("");
   const [subject, setSubject] = useState("all");
@@ -57,6 +59,9 @@ export function RepositoryBrowser({
   }, [record]);
   const loaded = useRef({ provider: "", id: "" });
   useEffect(() => () => controller.current?.abort(), []);
+  useEffect(() => {
+    if (initialRecord) browse(false, initialRecord.id);
+  }, []);
   async function run(action: (signal: AbortSignal) => Promise<void>) {
     if (controller.current) return;
     const abort = new AbortController();

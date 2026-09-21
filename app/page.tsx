@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Assistant } from "@/components/workstation/assistant";
 import {
   Activity,
   Brain,
@@ -23,6 +24,8 @@ import SpectraWorkspace from "@/components/workstation/spectra";
 import { useWorkspaceTools } from "@/components/workstation/webmcp";
 import { Toaster } from "@/components/ui/sonner";
 export default function Home() {
+  const [assistantKey, setAssistantKey] = useState("");
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [mode, setMode] = useState("mri"),
     [help, setHelp] = useState(false),
     [panel, setPanel] = useState(""),
@@ -58,6 +61,13 @@ export default function Home() {
           </TabsList>
         </Tabs>
         <div className="header-actions">
+          <button
+            className="btn"
+            aria-expanded={assistantOpen}
+            onClick={() => setAssistantOpen(!assistantOpen)}
+          >
+            AI assistant
+          </button>
           <button
             className="btn icon"
             aria-label="Layers"
@@ -99,26 +109,38 @@ export default function Home() {
         </div>
       </header>
 
-      <div style={{ display: mode === "mri" ? "contents" : "none" }}>
-        <MRIWorkspace
-          panel={panel}
-          onClosePanel={() => setPanel("")}
-          importTick={importTick.mri}
-          active={mode === "mri"}
-        />
-      </div>
-      <div style={{ display: mode === "nmr" ? "contents" : "none" }}>
-        <SpectraWorkspace
-          panel={panel}
-          onClosePanel={() => setPanel("")}
-          importTick={importTick.nmr}
-          active={mode === "nmr"}
-        />
+      <div className="workspace-body">
+        <div className="image-workspaces">
+          <div style={{ display: mode === "mri" ? "contents" : "none" }}>
+            <MRIWorkspace
+              panel={panel}
+              onClosePanel={() => setPanel("")}
+              importTick={importTick.mri}
+              active={mode === "mri"}
+            />
+          </div>
+          <div style={{ display: mode === "nmr" ? "contents" : "none" }}>
+            <SpectraWorkspace
+              panel={panel}
+              onClosePanel={() => setPanel("")}
+              importTick={importTick.nmr}
+              active={mode === "nmr"}
+            />
+          </div>
+        </div>
+        {assistantOpen && (
+          <Assistant
+            apiKey={assistantKey}
+            onApiKeyChange={setAssistantKey}
+            mode={mode}
+            onClose={() => setAssistantOpen(false)}
+          />
+        )}
       </div>
       <footer className="statusbar">
         <span>
           <LockKeyhole />
-          Files stay in this browser
+          Scan images stay in this browser
         </span>
         <span className="secondary-status">NMRView / Research & education</span>
         <span>
