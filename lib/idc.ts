@@ -93,12 +93,16 @@ export function idcFilters(
   body: string,
   collection: string,
   participant: string,
+  study = "",
 ) {
-  if ([body, collection, participant].some((v) => v.length > 128))
+  if (study && !/^\d+(\.\d+)+$/.test(study))
+    throw new Error("Invalid examination identifier.");
+  if ([body, collection, participant, study].some((v) => v.length > 128))
     throw new Error("Keep filters under 128 characters.");
   return {
     terms: {
       Modality: ["MR"],
+      ...(study ? { StudyInstanceUID: [study] } : {}),
       ...(body ? { BodyPartExamined: [body] } : {}),
       ...(collection ? { collection_id: [collection] } : {}),
       ...(participant ? { PatientID: [participant] } : {}),
@@ -115,11 +119,12 @@ export async function searchIDC(
   participant: string,
   page: number,
   signal: AbortSignal,
+  study = "",
 ) {
   if (!Number.isInteger(page) || page < 0)
     throw new Error("Invalid result page.");
   const result = await api<IDCPage>("/cohort/manifest", signal, {
-    filters: idcFilters(body, collection, participant),
+    filters: idcFilters(body, collection, participant, study),
     page,
     page_size: 10,
   });
@@ -301,4 +306,89 @@ export async function idcDocumentation(
       },
     ],
   };
+}
+
+export type IDCCollection = {
+  collection_id: string;
+  collection_name: string;
+  description: string;
+  tumor_locations: string;
+  cancer_types: string;
+  subjects: number;
+  series_count: number;
+};
+export async function idcCollections(
+  signal: AbortSignal,
+): Promise<IDCCollection[]> {
+  const catalog = await api<Omit<IDCCollection, "series_count">[]>(
+    "/collections",
+    signal,
+  );
+  const counts = await api<{
+    rows: { collection_id: string; series_count: number }[];
+    truncated: boolean;
+  }>("/sql", signal, {
+    sql: "SELECT collection_id, COUNT(*) AS series_count FROM index WHERE Modality = 'MR' GROUP BY collection_id ORDER BY collection_id",
+    max_rows: 1000,
+  });
+  if (counts.truncated)
+    throw new Error(
+      "IDC collection summary is incomplete. Try series search instead.",
+    );
+  const byId = new Map(
+    counts.rows.map((r) => [r.collection_id, r.series_count]),
+  );
+  return catalog
+    .filter((c) => (byId.get(c.collection_id) || 0) > 0)
+    .map((c) => ({ ...c, series_count: byId.get(c.collection_id)! }))
+    .sort((a, b) => a.collection_name.localeCompare(b.collection_name));
+}
+export function filterIDCCollections(
+  collections: IDCCollection[],
+  term: string,
+) {
+  const words = term.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return collections.filter((c) => {
+    const text = [
+      c.collection_name,
+      c.collection_id,
+      c.tumor_locations,
+      c.cancer_types,
+      c.description,
+    ]
+      .join(" ")
+      .toLowerCase();
+    return words.every((w) => text.includes(w));
+  });
+}
+export function groupIDCExaminations(series: IDCSeries[]) {
+  const groups = new Map<
+    string,
+    {
+      key: string;
+      collection: string;
+      participant: string;
+      study: string;
+      series: IDCSeries[];
+    }
+  >();
+  for (const s of series) {
+    const key = JSON.stringify([
+      s.collection_id,
+      s.PatientID,
+      s.StudyInstanceUID,
+    ]);
+    if (!groups.has(key))
+      groups.set(key, {
+        key,
+        collection: s.collection_id,
+        participant: s.PatientID,
+        study: s.StudyInstanceUID,
+        series: [],
+      });
+    const group = groups.get(key)!;
+    if (!group.series.some((x) => x.SeriesInstanceUID === s.SeriesInstanceUID))
+      group.series.push(s);
+  }
+  return [...groups.values()];
 }

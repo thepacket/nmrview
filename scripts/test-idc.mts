@@ -92,3 +92,65 @@ try {
 console.log(
   "IDC: bounded query, modality filter, metadata cache and cancellation passed.",
 );
+
+const { groupIDCExaminations, filterIDCCollections, idcCollections } =
+  await import("../lib/idc.ts");
+const groups = groupIDCExaminations([
+  s,
+  s,
+  { ...s, SeriesInstanceUID: "1.2.3.5" },
+  { ...s, StudyInstanceUID: "1.2.8", SeriesInstanceUID: "1.2.8.1" },
+  { ...s, collection_id: "different", SeriesInstanceUID: "1.2.9" },
+]);
+assert.equal(
+  groups.length,
+  3,
+  "Never merge examinations or collections by participant ID alone",
+);
+assert.equal(
+  groups[0].series.length,
+  2,
+  "Repeated pages must not duplicate a sequence",
+);
+assert.deepEqual(
+  idcFilters("", "test", "public-example", "1.2.3").terms.StudyInstanceUID,
+  ["1.2.3"],
+);
+assert.throws(() => idcFilters("", "", "", "invalid"));
+const catalog = [
+  {
+    collection_id: "prostate",
+    collection_name: "Prostate MRI",
+    description: "Response to treatment",
+    tumor_locations: "Pelvis",
+    cancer_types: "Prostate cancer",
+    subjects: 10,
+    series_count: 20,
+  },
+];
+assert.equal(filterIDCCollections(catalog, "pelvis treatment").length, 1);
+assert.equal(filterIDCCollections(catalog, "brain").length, 0);
+globalThis.fetch = async (url) =>
+  new Response(
+    JSON.stringify(
+      String(url).endsWith("/collections")
+        ? [...catalog, { ...catalog[0], collection_id: "ct_only" }]
+        : {
+            rows: [{ collection_id: "prostate", series_count: 20 }],
+            truncated: false,
+          },
+    ),
+  );
+try {
+  assert.deepEqual(
+    (await idcCollections(new AbortController().signal)).map(
+      (c) => c.collection_id,
+    ),
+    ["prostate"],
+  );
+} finally {
+  globalThis.fetch = nativeFetch;
+}
+console.log(
+  "IDC collection search, MRI-only catalog and examination grouping passed.",
+);

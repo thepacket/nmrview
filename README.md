@@ -56,7 +56,7 @@ The build produces a Cloudflare-compatible bundle in `dist/`. `npm start` runs t
 
 ## Documentation
 
-- [IDC MRI browsing](docs/IDC.md): body-region filters, complete DICOM-series loading, source documentation and access limits.
+- [IDC MRI browsing](docs/IDC.md): searchable MRI collections, participant/examination grouping, complete DICOM-series loading and access limits.
 
 - [Spectroscopy workflows](docs/SPECTROSCOPY.md): 1D/2D NMR, tissue MRS, quality, fitting, maps, and limitations.
 - [User guide](docs/USER_GUIDE.md): viewing controls, supported formats, online sources, spectroscopy, AI, limits, and verification.
