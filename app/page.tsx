@@ -40,7 +40,6 @@ export default function Home() {
             <span>
               NMR<span style={{ color: "#75deca" }}>View</span>
             </span>
-            <span className="edition">MRI viewer</span>
           </span>
         </div>
         <Tabs
