@@ -82,7 +82,6 @@ export async function completeAssistant(
           ],
           tools: assistantTools,
           max_tokens: 1600,
-          parallel_tool_calls: false,
           provider: { require_parameters: true },
         }),
       });
@@ -92,18 +91,22 @@ export async function completeAssistant(
       );
     }
     if (!response.ok) {
-      await response.body?.cancel();
+      const detail = await readOpenRouterError(response, apiKey);
+      if (response.status === 404) catalog = undefined;
       throw new Error(
         response.status === 401
           ? "OpenRouter rejected this API key. Check it in Assistant settings."
           : response.status === 402
             ? "Your OpenRouter account has insufficient credits."
-            : response.status === 429
-              ? "OpenRouter is rate limiting requests. Wait before retrying."
-              : `OpenRouter could not complete the request (${response.status}). Try another model.`,
+            : response.status === 404
+              ? `OpenRouter has no available route for ${payload.model}. ${detail || "Refresh the model list and check your OpenRouter provider/privacy preferences."}`
+              : response.status === 429
+                ? "OpenRouter is rate limiting requests. Wait before retrying."
+                : `OpenRouter could not complete the request (${response.status}). ${detail || "Try another model."}`,
       );
     }
     const data = (await response.json()) as {
+      error?: { message?: string; code?: number };
       choices?: {
         message?: {
           content?: unknown;
@@ -112,6 +115,10 @@ export async function completeAssistant(
       }[];
     };
     signal.throwIfAborted();
+    if (data.error)
+      throw new Error(
+        `OpenRouter: ${safeErrorText(data.error.message, apiKey) || "The provider returned an error. Try another model."}`,
+      );
     const message = data.choices?.[0]?.message;
     const actions = [];
     for (const call of (message?.tool_calls || []).slice(0, 3)) {
@@ -134,5 +141,43 @@ export async function completeAssistant(
     return { content, actions, model: payload.model };
   } finally {
     activity.busy = false;
+  }
+}
+
+function safeErrorText(value: unknown, key: string): string {
+  return typeof value === "string"
+    ? value
+        .split(key)
+        .join("[redacted]")
+        .replace(/sk-or-[a-z0-9_-]+/gi, "[redacted]")
+        .replace(/[\x00-\x1f]/g, " ")
+        .slice(0, 600)
+    : "";
+}
+async function readOpenRouterError(
+  response: Response,
+  key: string,
+): Promise<string> {
+  // Read only a bounded error envelope; never display upstream headers or raw metadata.
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+  let text = "";
+  let bytes = 0;
+  const decoder = new TextDecoder();
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      bytes += chunk.value.length;
+      if (bytes > 16384) return "";
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    text += decoder.decode();
+    const data = JSON.parse(text);
+    return safeErrorText(data?.error?.message, key);
+  } catch {
+    return "";
+  } finally {
+    await reader.cancel().catch(() => {});
   }
 }

@@ -38,6 +38,12 @@ try {
     assert.equal(init?.redirect, "error");
     assert.equal(body.model, "test/model");
     assert.equal(body.max_tokens, 1600);
+    assert.equal(
+      "parallel_tool_calls" in body,
+      false,
+      "optional capability must not exclude providers",
+    );
+    assert.deepEqual(body.provider, { require_parameters: true });
     assert.ok(!JSON.stringify(body).includes("test-secret"));
     return Response.json({
       choices: [
