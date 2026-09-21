@@ -1,4 +1,5 @@
 "use client";
+import { registerScanSource, snapshotCanvas } from "@/lib/assistant/scan";
 import {
   useEffect,
   useMemo,
@@ -625,6 +626,22 @@ function ComparisonPane({
     [frames, setFrames] = useState(1),
     [zoom, setZoom] = useState(1),
     [contrast, setContrast] = useState<[number, number]>([0, 1]);
+  useEffect(
+    () =>
+      registerScanSource(`comparison:${slotId}`, {
+        label: `${study.participant} ${study.session} · ${file.name.split("/").at(-1)}`,
+        available: () =>
+          ready &&
+          !!viewer.current?.volumes.length &&
+          !!canvas.current?.getBoundingClientRect().width,
+        capture: () =>
+          snapshotCanvas(
+            viewer.current!,
+            `${study.participant} ${study.session} · ${file.name}`,
+          ),
+      }),
+    [slotId, study.participant, study.session, file.name, ready],
+  );
   useEffect(() => {
     const abort = new AbortController();
     downloadController.current = abort;

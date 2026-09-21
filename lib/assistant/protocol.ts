@@ -1,4 +1,45 @@
 import { z } from "zod";
+export const dotSchema = z
+  .object({
+    label: z.string().trim().min(1).max(100),
+    x: z.number().finite().min(0).max(1),
+    y: z.number().finite().min(0).max(1),
+  })
+  .strict();
+export type StructureDot = z.infer<typeof dotSchema>;
+export const localizationSchema = z
+  .object({ dots: z.array(dotSchema).min(1).max(12) })
+  .strict();
+export const localizationTool = {
+  type: "function",
+  function: {
+    name: "locate_structures",
+    description:
+      "Propose approximate structure locations only on the attached snapshot. Coordinates normalized 0..1 across the ENTIRE image, x from left, y from top. Include concise anatomical labels and only structures you can confidently localize. Never use these as diagnoses or physical/voxel coordinates.",
+    parameters: {
+      type: "object",
+      properties: {
+        dots: {
+          type: "array",
+          minItems: 1,
+          maxItems: 12,
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string" },
+              x: { type: "number", minimum: 0, maximum: 1 },
+              y: { type: "number", minimum: 0, maximum: 1 },
+            },
+            required: ["label", "x", "y"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["dots"],
+      additionalProperties: false,
+    },
+  },
+};
 export const actionSchema = z.discriminatedUnion("kind", [
   z
     .object({
@@ -34,6 +75,18 @@ export const requestSchema = z
       .min(1)
       .max(24),
     context: z.string().max(16000),
+    snapshot: z
+      .object({
+        image: z
+          .string()
+          .max(3000000)
+          .regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/),
+        label: z.string().max(2000),
+        capturedAt: z.string().datetime(),
+        metadata: z.string().max(12000),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -43,6 +96,7 @@ export type AssistantModel = {
   context: number;
   input: string;
   output: string;
+  vision: boolean;
 };
 export const assistantTools = [
   {
@@ -128,6 +182,7 @@ export function parseModels(data: unknown): AssistantModel[] {
           context: m.context_length || 0,
           input: m.pricing.prompt,
           output: m.pricing.completion,
+          vision: m.architecture.input_modalities.includes("image"),
         },
       ];
     })

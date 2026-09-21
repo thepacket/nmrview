@@ -1,9 +1,21 @@
 "use client";
+import {
+  availableScanSources,
+  captureScanSource,
+  type ScanSnapshot,
+} from "@/lib/assistant/scan";
+import { AssistantLocalization } from "./assistant-localization";
+import {
+  sumUsage,
+  usageText,
+  type AssistantUsage,
+} from "@/lib/assistant/usage";
 import { getModels, completeAssistant } from "@/lib/assistant/client";
 import { useEffect, useRef, useState } from "react";
 import {
   actionLabel,
   actionSchema,
+  type StructureDot,
   type AssistantAction,
   type AssistantModel,
   type ChatMessage,
@@ -14,7 +26,12 @@ import {
   openAssistantRecord,
 } from "@/lib/assistant/viewer";
 import { searchDatasets, type DatasetResults } from "@/lib/repository-search";
-type Entry = ChatMessage & { actions?: AssistantAction[]; model?: string };
+type Entry = ChatMessage & {
+  actions?: AssistantAction[];
+  model?: string;
+  usage?: AssistantUsage;
+  localization?: { snapshot: ScanSnapshot; dots: StructureDot[] };
+};
 const price = (value: string) => {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0
@@ -32,11 +49,13 @@ export function Assistant({
   onApiKeyChange: (value: string) => void;
   onClose: () => void;
 }) {
+  const [snapshot, setSnapshot] = useState<ScanSnapshot | null>(null);
+  const [sources, setSources] = useState<{ id: string; label: string }[]>([]);
+  const [shareSnapshot, setShareSnapshot] = useState(false);
   const configured = !!apiKey.trim();
   const [models, setModels] = useState<AssistantModel[]>([]),
     [model, setModel] = useState("");
-  const [filter, setFilter] = useState(""),
-    [free, setFree] = useState(false);
+  const [free, setFree] = useState(false);
   const [catalogBusy, setCatalogBusy] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -90,6 +109,15 @@ export function Assistant({
   async function send(event: React.FormEvent) {
     event.preventDefault();
     if (controller.current || !input.trim() || !model || !configured) return;
+    if (
+      snapshot &&
+      (!shareSnapshot || !models.find((m) => m.id === model)?.vision)
+    ) {
+      setError(
+        "Select an image-capable model and confirm sharing the preview.",
+      );
+      return;
+    }
     const next: Entry[] = [
       ...messages,
       { role: "user", content: input.trim() },
@@ -114,10 +142,27 @@ export function Assistant({
             .slice(-12)
             .map(({ role, content }) => ({ role, content })),
           context: context.slice(0, 16000),
+          ...(snapshot ? { snapshot } : {}),
         },
         apiKey,
         abort.signal,
       );
+      if (snapshot) {
+        setMessages((v) =>
+          v.map((m, i) =>
+            i === v.length - 1
+              ? {
+                  ...m,
+                  content:
+                    m.content +
+                    `\n[Asked with snapshot: ${snapshot.label}, ${snapshot.capturedAt}. Image is not resent with follow-up messages.]`,
+                }
+              : m,
+          ),
+        );
+        setSnapshot(null);
+        setShareSnapshot(false);
+      }
       const actions = (data.actions || []).flatMap((a: unknown) => {
         const r = actionSchema.safeParse(a);
         return r.success ? [r.data] : [];
@@ -126,9 +171,17 @@ export function Assistant({
         ...v,
         {
           role: "assistant",
-          content: data.content || "Choose an action below.",
+          content:
+            data.content ||
+            (data.dots.length
+              ? "Review the proposed structure locations below."
+              : "Choose an action below."),
           actions,
           model: data.model,
+          usage: data.usage,
+          ...(snapshot && data.dots.length
+            ? { localization: { snapshot, dots: data.dots } }
+            : {}),
         },
       ]);
     } catch (e) {
@@ -204,8 +257,8 @@ export function Assistant({
   const selected = models.find((m) => m.id === model);
   const visible = models.filter(
     (m) =>
-      (!free || (Number(m.input) === 0 && Number(m.output) === 0)) &&
-      `${m.name} ${m.id}`.toLowerCase().includes(filter.toLowerCase()),
+      (!snapshot || m.vision) &&
+      (!free || (Number(m.input) === 0 && Number(m.output) === 0)),
   );
   return (
     <aside className="assistant-panel" aria-label="AI assistant">
@@ -217,15 +270,6 @@ export function Assistant({
       </div>
       <details open={!model} className="assistant-settings">
         <summary>{selected?.name || "Choose an OpenRouter model"}</summary>
-        <label>
-          Find a model
-          <input
-            className="field"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Model or provider"
-          />
-        </label>
         <label>
           <input
             type="checkbox"
@@ -313,8 +357,9 @@ export function Assistant({
         <summary>Context & privacy</summary>
         <p className="hint">
           Your messages go to OpenRouter and the selected model provider. Scan
-          images are never sent. Conversation stays in memory until this panel
-          closes. Only your model preference is saved.
+          images are sent only when you attach a viewport preview and confirm
+          sharing it. Full scan volumes are never sent. Conversation stays in
+          memory until this panel closes. Only your model preference is saved.
         </p>
         <label>
           <input
@@ -337,6 +382,92 @@ export function Assistant({
           <pre className="assistant-context">{contextPreview}</pre>
         )}
       </details>
+      <details className="assistant-settings">
+        <summary>Ask about a displayed scan</summary>
+        <p className="hint">
+          Attach the current view for questions about anatomy, orientation or
+          image quality. This is educational assistance, not a diagnostic scan
+          review.
+        </p>
+        <button
+          className="btn small"
+          disabled={busy || mode !== "mri"}
+          onClick={() => {
+            const list = availableScanSources();
+            setSources(list);
+            if (!list.length) setError("No loaded MRI view is visible.");
+          }}
+        >
+          Choose displayed scan
+        </button>
+        {sources.map((source) => (
+          <button
+            key={source.id}
+            className="btn small"
+            disabled={busy}
+            onClick={() => {
+              try {
+                setSnapshot(captureScanSource(source.id));
+                setShareSnapshot(false);
+                setSources([]);
+                setError("");
+              } catch (e) {
+                setError(e instanceof Error ? e.message : String(e));
+              }
+            }}
+          >
+            Capture {source.label}
+          </button>
+        ))}
+        {snapshot && (
+          <>
+            <p>
+              {snapshot.label} ·{" "}
+              {new Date(snapshot.capturedAt).toLocaleTimeString()}
+            </p>
+            <img
+              src={snapshot.image}
+              alt="Exact MRI viewport to send with your question"
+              className="assistant-scan-preview"
+            />
+            <details>
+              <summary>Attached acquisition and display details</summary>
+              <pre className="assistant-context">{snapshot.metadata}</pre>
+            </details>
+            <p className="hint">
+              This frozen preview is sent only with your next question. Capture
+              again after changing slices. It may include visible annotations
+              and identifying details.
+            </p>
+            {!selected?.vision && (
+              <p role="status">
+                Choose an image-capable model above. The model list now shows
+                image-capable options.
+              </p>
+            )}
+            <label>
+              <input
+                type="checkbox"
+                disabled={busy}
+                checked={shareSnapshot}
+                onChange={(e) => setShareSnapshot(e.target.checked)}
+              />{" "}
+              Send this image and its displayed metadata to OpenRouter and the
+              selected model provider with my next question.
+            </label>
+            <button
+              className="btn small"
+              disabled={busy}
+              onClick={() => {
+                setSnapshot(null);
+                setShareSnapshot(false);
+              }}
+            >
+              Remove attachment
+            </button>
+          </>
+        )}
+      </details>
       <div
         className="assistant-log"
         ref={log}
@@ -356,6 +487,8 @@ export function Assistant({
             <strong>{m.role === "user" ? "You" : "Assistant"}</strong>
             {m.model && <small>{m.model}</small>}
             <p>{m.content}</p>
+            {m.usage && <p className="hint">{usageText(m.usage)}</p>}
+            {m.localization && <AssistantLocalization {...m.localization} />}
             {m.actions?.map((a, j) => (
               <button
                 key={j}
@@ -429,7 +562,19 @@ export function Assistant({
           Undo last viewer action
         </button>
       )}
+      {messages.some((m) => m.usage) && (
+        <p className="hint" aria-label="Chat usage total">
+          Chat total —{" "}
+          {usageText(
+            sumUsage(messages.flatMap((m) => (m.usage ? [m.usage] : []))),
+          )}
+          <br />
+          OpenRouter-reported usage for completed replies in this chat. Stopped
+          or failed requests may still incur charges.
+        </p>
+      )}
       <form onSubmit={send}>
+        <p className="hint">Enter to send · Shift+Enter for a new line</p>
         <label htmlFor="assistant-prompt">Message</label>
         <textarea
           id="assistant-prompt"
@@ -438,14 +583,31 @@ export function Assistant({
           maxLength={4000}
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (
+              e.key === "Enter" &&
+              !e.shiftKey &&
+              !e.nativeEvent.isComposing &&
+              e.keyCode !== 229
+            ) {
+              e.preventDefault();
+              if (!e.repeat) e.currentTarget.form?.requestSubmit();
+            }
+          }}
           placeholder="Ask about scans or the viewer…"
         />
         <div className="full-row">
           <button
             className="btn primary"
-            disabled={busy || !model || !configured || !input.trim()}
+            disabled={
+              busy ||
+              !model ||
+              !configured ||
+              !input.trim() ||
+              (!!snapshot && (!shareSnapshot || !selected?.vision))
+            }
           >
-            Send
+            {snapshot ? "Send with scan" : "Send"}
           </button>
           {busy && (
             <button
@@ -461,6 +623,9 @@ export function Assistant({
             className="btn small"
             disabled={busy}
             onClick={() => {
+              setSnapshot(null);
+              setShareSnapshot(false);
+              setSources([]);
               setMessages([]);
               setResults(null);
               setApplied([]);

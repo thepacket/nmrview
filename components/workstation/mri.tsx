@@ -1,4 +1,5 @@
 "use client";
+import { registerScanSource, snapshotCanvas } from "@/lib/assistant/scan";
 import { registerAssistantViewer } from "@/lib/assistant/viewer";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -482,6 +483,20 @@ export default function MRIWorkspace({
         },
       }),
     [layout, nearest, layers, documentation, comparing, busy],
+  );
+  useEffect(
+    () =>
+      registerScanSource("main", {
+        label: "Main MRI view",
+        available: () =>
+          active &&
+          !comparing &&
+          !busy &&
+          !!nv.current?.volumes.length &&
+          !!canvas.current?.getBoundingClientRect().width,
+        capture: () => snapshotCanvas(nv.current!, "Main MRI view"),
+      }),
+    [active, comparing, busy],
   );
   function reset() {
     const n = nv.current;

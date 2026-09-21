@@ -142,7 +142,7 @@ export default function Home() {
       <footer className="statusbar">
         <span>
           <LockKeyhole />
-          Scan images stay in this browser
+          AI images shared only by choice
         </span>
         <span className="secondary-status">NMRView / Research & education</span>
         <span>
@@ -219,11 +219,13 @@ export default function Home() {
             </p>
             <h3>Privacy and intended use</h3>
             <p>
-              Imported scans are not uploaded. Exported sessions can contain
-              scan data and metadata; store them appropriately. This application
-              is for research and education and has not been validated for
-              clinical diagnosis. Browser memory and GPU capabilities limit
-              study size, especially on mobile.
+              Full scans stay in this browser. The AI assistant can send a
+              viewport image to OpenRouter only when you attach it and confirm
+              sharing. Exported sessions can contain scan data and metadata;
+              store them appropriately. This application is for research and
+              education and has not been validated for clinical diagnosis.
+              Browser memory and GPU capabilities limit study size, especially
+              on mobile.
             </p>
           </div>
         </DialogContent>

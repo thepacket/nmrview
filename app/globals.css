@@ -1875,3 +1875,10 @@ button svg {
 .assistant-message.user {color:#b4d9d2;}
 .assistant-context {max-height:160px;overflow:auto;white-space:pre-wrap;font-size:11px;}
 @media(max-width:800px){.workspace-body:has(.assistant-panel){flex-direction:column;}.assistant-panel{width:100%;max-width:none;height:42dvh;min-height:220px;border-left:0;border-top:1px solid #34434b;}.workspace-body:has(.assistant-panel) .image-workspaces{min-height:180px;}.header-actions{flex-wrap:wrap;}}
+
+.assistant-scan-preview {display:block;width:100%;height:auto;max-height:220px;object-fit:contain;background:#000;border:1px solid #34434b;}
+
+.assistant-localization-image {position:relative;width:100%;margin:12px 0;}
+.assistant-localization-image img {display:block;width:100%;height:auto;}
+.assistant-dot {position:absolute;transform:translate(-50%,-50%);width:22px;height:22px;border-radius:50%;background:#facc15;color:#111;border:2px solid #111;box-shadow:0 0 0 2px white;display:flex;align-items:center;justify-content:center;font:bold 12px system-ui;pointer-events:none;}
+.assistant-localization-dialog {width:min(95vw,1200px)!important;max-width:1200px!important;max-height:92dvh;overflow:auto;}
