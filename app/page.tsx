@@ -36,10 +36,12 @@ export default function Home() {
       <header className="topbar">
         <div className="brand">
           <Activity strokeWidth={1.8} />
-          <span>
-            NMR<span style={{ color: "#75deca" }}>View</span>
+          <span className="brand-label">
+            <span>
+              NMR<span style={{ color: "#75deca" }}>View</span>
+            </span>
+            <span className="edition">MRI viewer</span>
           </span>
-          <span className="edition">Research workspace</span>
         </div>
         <Tabs
           className="mode-tabs"
@@ -158,6 +160,13 @@ export default function Home() {
             MRI imaging and NMR spectroscopy are independent workspaces.
           </DialogDescription>
           <div className="dialog-body">
+            <h3>Why NMRView?</h3>
+            <p>
+              NMRView takes its name from nuclear magnetic resonance, the
+              physics behind magnetic resonance imaging (MRI). Use the MRI
+              workspace to view scans and the NMR spectroscopy workspace to
+              explore spectra.
+            </p>
             <h3>MRI imaging</h3>
             <p>
               Open NIfTI (.nii, .nii.gz), NRRD, or a series of DICOM files. All

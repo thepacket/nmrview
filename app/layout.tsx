@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "NMRView · Imaging & Spectroscopy",
+  title: "NMRView — MRI & spectroscopy",
   description:
     "A browser workstation for MRI volumes and NMR spectroscopy. Local data processing, layered views, and research tools.",
   other: {

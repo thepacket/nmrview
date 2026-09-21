@@ -161,14 +161,18 @@ button svg {
   width: 30px;
   height: 30px;
 }
+.brand-label {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
 .edition {
   color: #94a3af;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1.6px;
-  border-left: 1px solid #3a444b;
-  padding-left: 14px;
-  margin-left: 3px;
+  margin-top: 4px;
+  white-space: nowrap;
 }
 .mode-tabs {
   margin: auto;
@@ -645,9 +649,7 @@ button svg {
     gap: 14px;
     padding: 0 16px;
   }
-  .edition {
-    display: none;
-  }
+
   .mode-tabs [data-slot="tabs-trigger"] {
     padding: 8px 12px;
   }

@@ -1,4 +1,6 @@
-# NMRView
+# NMRView — MRI & spectroscopy
+
+NMRView takes its name from nuclear magnetic resonance, the physics behind magnetic resonance imaging (MRI). The MRI viewer and NMR spectroscopy workspace share the same application.
 
 A responsive browser workstation for MRI volumes and processed 1D NMR spectra. Research and education use; not validated or certified for diagnosis.
 
