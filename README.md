@@ -18,7 +18,14 @@ NMRView is a responsive research and education workstation for viewing MRI volum
 - In-app Zenodo browsing for tissue MRS and 2D NMR, OpenNeuro MRS dataset lookup, and automatic discovery of optional acquisition notes and compatible Zenodo basis files.
 - Processed 1D spectroscopy: overlays, peak picking, integration, referencing, baseline correction, and export.
 - Optional OpenRouter assistant with your own key, model selection, explicitly shared scan snapshots, suggested location dots, and reported token usage/cost.
+- Session reset clears loaded MRI and spectroscopy data, background processing and AI state, while retaining saved collections.
 - Desktop and mobile layouts with controls that leave room for the images.
+
+## Start a fresh session
+
+Select **Reset session** (the circular arrow in the top bar) and confirm to restart with empty viewers. Save any work first: loaded scans, spectra, unsaved annotations, the AI conversation and its API key are cleared. Saved collections, saved annotations and exported files remain available.
+
+The reset page keeps `?session=empty` in its URL so refreshing or switching workspaces does not automatically reload sample scans or the previous collection. You can import scans, open saved collections or explicitly load reference data again. Reset releases the old session's memory; it does not erase the browser's disk cache. See the [user guide](docs/USER_GUIDE.md#reset-the-session).
 
 ## Choose a spectroscopy workflow
 

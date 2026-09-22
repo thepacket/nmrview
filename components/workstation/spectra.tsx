@@ -1,4 +1,5 @@
 "use client";
+import { isEmptySession } from "@/lib/session-reset";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChartNoAxesCombined,
@@ -205,7 +206,7 @@ export default function SpectraWorkspace({
   useEffect(() => {
     if (active && !initialized.current) {
       initialized.current = true;
-      loadSamples();
+      if (!isEmptySession()) loadSamples();
     }
   }, [active]);
   useEffect(() => {

@@ -7,6 +7,7 @@ import {
 import { registerMRSAnatomy } from "@/lib/nmr/anatomy";
 import { registerScanSource, snapshotCanvas } from "@/lib/assistant/scan";
 import { registerAssistantViewer } from "@/lib/assistant/viewer";
+import { isEmptySession } from "@/lib/session-reset";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Brain,
@@ -170,6 +171,7 @@ export default function MRIWorkspace({
   const collectionInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     try {
+      if (isEmptySession()) return;
       const saved = readSavedCollection();
       if (saved) {
         setCollection(saved.collection);
@@ -325,6 +327,14 @@ export default function MRIWorkspace({
           setMeasurements((s) => [...s, m]);
         instance.onAngleCompleted = (m) => setMeasurements((s) => [...s, m]);
         instance.onImageLoaded = () => sync();
+        if (isEmptySession()) {
+          startupAtlasAbort.current = null;
+          setSample(false);
+          setReady(true);
+          sync();
+          setBusy("");
+          return;
+        }
         const quality = defaultAtlasQuality();
         setAtlasQuality(quality);
         try {

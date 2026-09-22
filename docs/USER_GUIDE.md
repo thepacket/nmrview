@@ -8,6 +8,12 @@ A responsive browser workstation for MRI volumes, laboratory 1D/2D NMR spectra a
 
 Node 22.13+ is required. `npm ci`, then `npm run dev`. The normal local URL is http://localhost:5173/. `npm run build` produces a Cloudflare-compatible bundle in `dist/`.
 
+## Reset the session
+
+Use **Reset session** (the circular arrow in the top bar), then confirm. This restarts the page with empty MRI and spectroscopy workspaces, discarding loaded scans, spectra, comparisons, unsaved edits, the AI conversation and its in-memory API key. Background workers and the old viewer's memory are released by the browser. Saved collections, saved annotations and exported files are retained.
+
+The reset URL contains `?session=empty`: refreshing it or switching to spectroscopy will not load samples or restore the previous collection automatically. Import scans or open a saved collection to resume; MRI reference images and spectroscopy samples can still be loaded explicitly through their controls. This does not delete the browser's disk cache.
+
 ## MRI workspace
 
 - Browser-local NIfTI (.nii/.nii.gz), NRRD, MGH/MGZ and DICOM-series import.

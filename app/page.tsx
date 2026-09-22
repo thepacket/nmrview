@@ -1,8 +1,10 @@
 "use client";
+import { resetSession } from "@/lib/session-reset";
 import { useState } from "react";
 import { Assistant } from "@/components/workstation/assistant";
 import {
   Activity,
+  RotateCcw,
   Brain,
   ChartNoAxesCombined,
   CircleHelp,
@@ -24,6 +26,7 @@ import SpectraWorkspace from "@/components/workstation/spectroscopy-workbench";
 import { useWorkspaceTools } from "@/components/workstation/webmcp";
 import { Toaster } from "@/components/ui/sonner";
 export default function Home() {
+  const [resetOpen, setResetOpen] = useState(false);
   const [assistantKey, setAssistantKey] = useState("");
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [mode, setMode] = useState("mri"),
@@ -62,6 +65,14 @@ export default function Home() {
           </TabsList>
         </Tabs>
         <div className="header-actions">
+          <button
+            className="btn icon"
+            aria-label="Reset session"
+            title="Reset session"
+            onClick={() => setResetOpen(true)}
+          >
+            <RotateCcw />
+          </button>
           <button
             className="btn"
             aria-expanded={assistantOpen}
@@ -152,6 +163,23 @@ export default function Home() {
           <span className="mobile-toggle">Research use</span>
         </span>
       </footer>
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogTitle>Reset session?</DialogTitle>
+          <DialogDescription>
+            Clear all loaded MRI scans, spectra, comparison views, unsaved
+            annotations and the AI conversation. The app will restart with empty
+            workspaces and release its scan memory. Your AI API key will also
+            be cleared.
+          </DialogDescription>
+          <p>Saved collections, saved annotations and exported files remain available.
+            Save any work you want to keep before resetting.</p>
+          <div className="flex justify-end gap-2">
+            <button className="btn" onClick={() => setResetOpen(false)}>Cancel</button>
+            <button className="btn primary" onClick={resetSession}>Reset session</button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={help} onOpenChange={setHelp}>
         <DialogContent className="max-w-2xl">
           <DialogTitle>Working with NMRView</DialogTitle>
