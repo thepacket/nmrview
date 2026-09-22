@@ -230,3 +230,9 @@ Desktop startup uses the official ICBM 2009b asymmetric **0.5 mm T1 atlas** (394
 Touch-first devices and browsers reporting 2 GB or less of device memory default to the lighter ICBM 2009c **1 mm atlas**. In **Layers → Reference image quality**, select either version and choose **Load free reference**. During the initial high-detail download, **Use lightweight 1 mm reference** skips to the smaller version. A failed high-detail startup falls back to the 1 mm reference.
 
 The optional T2 and gray-matter layers remain 1 mm 2009c references and are labeled accordingly. Their sampling and template version differ from the high-detail T1. Larger data require more memory and longer first-load downloads; smoothing is not used to conceal source resolution.
+
+### Collection identity when saving
+
+The library saves only the active repository collection (in comparison, or a scan opened from that collection into the main viewer). Loading an individual scan does not make an older comparison collection current. If the displayed scan is a standalone import, including an IDC/DICOM series, save the actual images with **Layers → Session → Save** instead.
+
+Before saving, the library shows the source dataset title and URL. Existing entries show their original dataset and saved scan references independently of your chosen name. If an older entry named for a knee study actually lists a brain dataset, its stored references are to that brain dataset; renaming it cannot recover missing knee references. Reload the intended knee study and save the appropriate collection or MRI session. Existing snapshots are preserved by this update.

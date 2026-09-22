@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import type { StudyCollection } from "@/lib/study-collection";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   LIBRARY_KEY,
+  matchingActiveCollection,
   parseLibrary,
   saveLibrary,
   type LibraryEntry,
@@ -23,7 +25,9 @@ export function CollectionLibrary({
   onClose,
   onOpen,
   onImport,
+  activeCollection,
 }: {
+  activeCollection: StudyCollection | null;
   open: boolean;
   onClose: () => void;
   onOpen: (session: CollectionSession) => void;
@@ -41,10 +45,15 @@ export function CollectionLibrary({
     setMessage("");
     setEditing(null);
     setReadable(false);
+    setCurrent(null);
+    setName("");
     try {
       setEntries(parseLibrary(localStorage.getItem(LIBRARY_KEY)));
       setReadable(true);
-      const session = readSavedCollection();
+      const session = matchingActiveCollection(
+        readSavedCollection(),
+        activeCollection,
+      );
       setCurrent(session);
       setName(session?.collection.title.slice(0, 120) || "");
     } catch (e) {
@@ -52,7 +61,7 @@ export function CollectionLibrary({
         e instanceof Error ? e.message : "Browser storage is unavailable.",
       );
     }
-  }, [open]);
+  }, [open, activeCollection]);
   function write(next: LibraryEntry[], success: string) {
     try {
       saveLibrary(localStorage, next);
@@ -97,19 +106,34 @@ export function CollectionLibrary({
                 !readable || !current || !name.trim() || entries.length >= 30
               }
               onClick={() => {
-                if (current)
+                try {
+                  const latest = matchingActiveCollection(
+                    readSavedCollection(),
+                    activeCollection,
+                  );
+                  if (!latest || !current) {
+                    setMessage(
+                      "The active collection changed. Reopen the library before saving.",
+                    );
+                    return;
+                  }
                   write(
                     [
                       {
                         id: crypto.randomUUID(),
                         name: name.trim(),
                         savedAt: new Date().toISOString(),
-                        session: current,
+                        session: latest,
                       },
                       ...entries,
                     ],
                     "Named snapshot saved. Later changes remain in your current collection until you save another snapshot.",
                   );
+                } catch {
+                  setMessage(
+                    "The current collection could not be read. No snapshot was saved.",
+                  );
+                }
               }}
             >
               Save current snapshot
@@ -118,10 +142,20 @@ export function CollectionLibrary({
               Import collection file
             </button>
           </div>
+          {current && (
+            <p>
+              Saving dataset: <strong>{current.collection.title}</strong>
+              <br />
+              {current.collection.documentation.source}
+            </p>
+          )}
           {!current && (
             <p>
-              Open a repository collection to save its participants and views
-              here. Local MRI sessions use the separate MRI session export.
+              The displayed scans are not an active repository collection. Open
+              a collection in comparison to save it here. For individually
+              imported scans (including IDC/DICOM), use Layers → Session → Save
+              to preserve the actual loaded images. An older collection will not
+              be substituted.
             </p>
           )}
           <p role="status">{message}</p>
@@ -172,6 +206,34 @@ export function CollectionLibrary({
                 {entry.session.collection.studies.length} participant/session
                 studies · {new Date(entry.savedAt).toLocaleString()}
               </p>
+              <p>
+                Dataset: <strong>{entry.session.collection.title}</strong>
+                <br />
+                <a
+                  href={entry.session.collection.documentation.source}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Original source ↗
+                </a>
+              </p>
+              <details>
+                <summary>Saved scan references</summary>
+                <ul>
+                  {entry.session.collection.studies
+                    .slice(0, 10)
+                    .map((study) => (
+                      <li key={study.id}>
+                        {study.participant} {study.session} ·{" "}
+                        {entry.session.view.choices[study.id] ||
+                          study.initialFile}
+                      </li>
+                    ))}
+                </ul>
+                {entry.session.collection.studies.length > 10 && (
+                  <p>Showing the first 10 studies.</p>
+                )}
+              </details>
               <div className="library-actions">
                 <button
                   className="btn primary"

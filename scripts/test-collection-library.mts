@@ -3,6 +3,7 @@ import {
   parseLibrary,
   saveLibrary,
   LIBRARY_KEY,
+  matchingActiveCollection,
 } from "../lib/collection-library.ts";
 const file = {
   name: "sub-01_T1w.nii.gz",
@@ -84,3 +85,26 @@ assert.deepEqual(parseLibrary(raw), []);
 console.log(
   "PASS: named collection snapshots, rename, deletion, validation and quota failure preservation.",
 );
+
+assert.equal(
+  matchingActiveCollection(session, null),
+  null,
+  "standalone knee import must not save old brain collection",
+);
+const knee = structuredClone(session.collection);
+knee.title = "Knee scans";
+assert.equal(
+  matchingActiveCollection(session, knee),
+  null,
+  "same ID with different sources/contents is not current",
+);
+assert.equal(matchingActiveCollection(session, session.collection), session);
+assert.equal(matchingActiveCollection(null, knee), null);
+console.log(
+  "PASS: saving requires the active collection, not stale browser storage.",
+);
+const reordered = { documentation: session.collection.documentation, studies: session.collection.studies, title: session.collection.title, id: session.collection.id };
+assert.equal(matchingActiveCollection(session, reordered), session, "property ordering must not reject the active collection");
+const changedSource = structuredClone(session.collection);
+changedSource.studies[0].files[0].url = "https://zenodo.org/api/records/123/files/knee.nii/content";
+assert.equal(matchingActiveCollection(session, changedSource), null, "scan URL changes invalidate a stale snapshot even when collection ID matches");

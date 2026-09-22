@@ -1,3 +1,4 @@
+import type { StudyCollection } from "./study-collection.ts";
 import {
   parseCollectionSession,
   type CollectionSession,
@@ -51,4 +52,23 @@ export function saveLibrary(
   parseLibrary(raw);
   // A single atomic write: quota errors leave the previous library intact.
   storage.setItem(LIBRARY_KEY, raw);
+}
+
+/** Never label a previously persisted collection as the currently displayed scans. */
+export function matchingActiveCollection(
+  saved: CollectionSession | null,
+  active: StudyCollection | null,
+): CollectionSession | null {
+  if (!saved || !active) return null;
+  try {
+    const normalized = parseCollectionSession(
+      JSON.stringify({ ...saved, collection: active }),
+    );
+    return JSON.stringify(saved.collection) ===
+      JSON.stringify(normalized.collection)
+      ? saved
+      : null;
+  } catch {
+    return null;
+  }
 }

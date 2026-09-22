@@ -160,7 +160,6 @@ export default function MRIWorkspace({
       const saved = readSavedCollection();
       if (saved) {
         setCollection(saved.collection);
-        setDocumentation(saved.collection.documentation);
       }
     } catch {
       toast.error(
@@ -708,6 +707,7 @@ export default function MRIWorkspace({
         );
       mainScan.current = null;
       setCaseContext(null);
+      setDocumentation(null);
       if (sample || replaceStudy) {
         const drawingCallback = n.onDrawingChanged;
         n.onDrawingChanged = () => {};
@@ -762,6 +762,11 @@ export default function MRIWorkspace({
   return (
     <section className="workspace" aria-label="MRI workspace">
       <CollectionLibrary
+        activeCollection={
+          comparing || mainScan.current?.collectionId === collection?.id
+            ? collection
+            : null
+        }
         open={libraryOpen}
         onClose={() => setLibraryOpen(false)}
         onImport={() => collectionInput.current?.click()}
@@ -1815,7 +1820,11 @@ export default function MRIWorkspace({
                 setPlaying(false);
               }}
               onLoad={async (files, _source, replace) => {
-                await importFiles(files, replace);
+                const ok = await importFiles(files, replace);
+                if (!ok)
+                  throw new Error(
+                    "Scan import failed. The previously displayed images have not been replaced.",
+                  );
               }}
             />
             <div className="data-choice">
