@@ -463,6 +463,23 @@ export default function MRIWorkspace({
             spacing,
             frames,
           })),
+          collection: collection
+            ? {
+                title: collection.title,
+                source: collection.documentation.source,
+                totalStudies: collection.studies.length,
+                scope:
+                  "Up to 8 studies and 6 filenames per study; filenames suggest contrast but do not confirm it.",
+                studies: collection.studies.slice(0, 8).map((study) => ({
+                  participant: study.participant,
+                  session: study.session,
+                  totalFiles: study.files.length,
+                  files: study.files
+                    .slice(0, 6)
+                    .map((file) => file.name.slice(0, 120)),
+                })),
+              }
+            : null,
           documentation: documentation
             ? {
                 title: documentation.title,
@@ -527,7 +544,7 @@ export default function MRIWorkspace({
           throw new Error("Unsupported viewer action.");
         },
       }),
-    [layout, nearest, layers, documentation, comparing, busy],
+    [layout, nearest, layers, documentation, comparing, busy, collection],
   );
   useEffect(
     () =>

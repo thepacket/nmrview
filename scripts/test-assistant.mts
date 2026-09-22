@@ -37,7 +37,7 @@ try {
     assert.equal(init?.credentials, "omit");
     assert.equal(init?.redirect, "error");
     assert.equal(body.model, "test/model");
-    assert.equal(body.max_tokens, 1600);
+    assert.equal(body.max_tokens, 4096);
     assert.equal(
       "parallel_tool_calls" in body,
       false,
