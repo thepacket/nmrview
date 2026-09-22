@@ -12,14 +12,18 @@ import {
   type IDCPage,
   type IDCSeries,
 } from "@/lib/idc";
+import { tciaCollections } from "@/lib/tcia";
 import type { CaseDocumentation } from "@/lib/study-collection";
 export function IDCBrowser({
   onLoad,
   onDocumentation,
+  source = "idc",
 }: {
+  source?: "idc" | "tcia";
   onLoad: (files: File[], source: string, replace: boolean) => Promise<void>;
   onDocumentation?: (doc: CaseDocumentation) => void;
 }) {
+  const isTCIA = source === "tcia";
   const [catalog, setCatalog] = useState<IDCCollection[] | null>(null);
   const [catalogTerm, setCatalogTerm] = useState("");
   const [catalogLimit, setCatalogLimit] = useState(10);
@@ -69,37 +73,67 @@ export function IDCBrowser({
     const filters = more
       ? last.current
       : scope || [body, collection.trim(), participant.trim(), exam];
-    void run("Searching IDC MRI series…", async (signal) => {
-      const r = await searchIDC(
-        filters[0],
-        filters[1],
-        filters[2],
-        page,
-        signal,
-        filters[3],
-      );
-      signal.throwIfAborted();
-      last.current = filters;
-      setResult(
-        more
-          ? {
-              ...r,
-              series: [...(result?.series || []), ...r.series].filter(
-                (s, i, a) =>
-                  a.findIndex(
-                    (x) => x.SeriesInstanceUID === s.SeriesInstanceUID,
-                  ) === i,
-              ),
-            }
-          : r,
-      );
-    });
+    if (isTCIA && !catalog?.some((c) => c.collection_id === filters[1])) {
+      setError("Browse and select a TCIA collection first.");
+      return;
+    }
+    void run(
+      `Searching ${isTCIA ? "TCIA" : "IDC"} MRI series…`,
+      async (signal) => {
+        const r = await searchIDC(
+          filters[0],
+          filters[1],
+          filters[2],
+          page,
+          signal,
+          filters[3],
+        );
+        signal.throwIfAborted();
+        if (isTCIA && r.series.some((s) => s.collection_id !== filters[1]))
+          throw new Error(
+            "Repository returned series outside the selected TCIA collection.",
+          );
+        last.current = filters;
+        setResult(
+          more
+            ? {
+                ...r,
+                series: [...(result?.series || []), ...r.series].filter(
+                  (s, i, a) =>
+                    a.findIndex(
+                      (x) => x.SeriesInstanceUID === s.SeriesInstanceUID,
+                    ) === i,
+                ),
+              }
+            : r,
+        );
+      },
+    );
   }
   function load(series: IDCSeries) {
     void run(
       "Reading source documentation…",
       async (signal) => {
         const doc = await idcDocumentation(series, signal);
+        const collectionInfo = catalog?.find(
+          (c) => c.collection_id === series.collection_id,
+        );
+        if (isTCIA && !collectionInfo?.source_url)
+          throw new Error(
+            "Select a verified TCIA collection before downloading.",
+          );
+        if (collectionInfo?.source_url) {
+          doc.source = collectionInfo.source_url;
+          doc.links.unshift({
+            label: "TCIA collection, supporting data and citations",
+            url: collectionInfo.source_url,
+          });
+          if (collectionInfo.source_doi)
+            doc.sections.push({
+              title: "Collection DOI",
+              text: collectionInfo.source_doi,
+            });
+        }
         const files = await downloadIDCSeries(series, signal, setBusy);
         signal.throwIfAborted();
         setBusy("Converting DICOM in your browser…");
@@ -115,8 +149,20 @@ export function IDCBrowser({
   }
   const matches = filterIDCCollections(catalog || [], catalogTerm);
   return (
-    <section aria-label="IDC MRI browser">
-      <h4>Imaging Data Commons · MRI</h4>
+    <section aria-label={isTCIA ? "TCIA MRI browser" : "IDC MRI browser"}>
+      <h4>
+        {isTCIA
+          ? "The Cancer Imaging Archive · MRI"
+          : "Imaging Data Commons · MRI"}
+      </h4>
+      {isTCIA && (
+        <p>
+          Browse TCIA collections available through the official NCI Imaging
+          Data Commons mirror. Restricted collections and data not mirrored in
+          IDC are not included. Choose a collection, then a participant or
+          examination, and load a complete series directly into NMRView.
+        </p>
+      )}
       <p>
         Free public MRI series. Search metadata first; images download only when
         you choose a series. Up to 1,000 DICOM files / 512 MB per series.
@@ -129,11 +175,15 @@ export function IDCBrowser({
             disabled={!!busy}
             onClick={() =>
               void run("Reading MRI collection catalog…", async (signal) =>
-                setCatalog(await idcCollections(signal)),
+                setCatalog(
+                  await (isTCIA
+                    ? tciaCollections(signal)
+                    : idcCollections(signal)),
+                ),
               )
             }
           >
-            Browse MRI collections
+            {isTCIA ? "Browse TCIA MRI collections" : "Browse MRI collections"}
           </button>
         ) : (
           <>
@@ -170,6 +220,13 @@ export function IDCBrowser({
                   <summary>Collection description</summary>
                   <p style={{ whiteSpace: "pre-wrap" }}>{c.description}</p>
                 </details>
+                {c.source_url && (
+                  <p>
+                    <a href={c.source_url} target="_blank" rel="noreferrer">
+                      TCIA documentation, supporting data & citation ↗
+                    </a>
+                  </p>
+                )}
                 <button
                   className="btn"
                   disabled={!!busy}
@@ -234,10 +291,12 @@ export function IDCBrowser({
         regions.
       </p>
       <label>
-        Collection ID (optional)
+        {isTCIA ? "Selected TCIA collection ID" : "Collection ID (optional)"}
         <input
           className="field"
           value={collection}
+          readOnly={isTCIA}
+          placeholder={isTCIA ? "Choose a collection above" : undefined}
           maxLength={128}
           disabled={!!busy}
           onChange={(e) => {
@@ -276,7 +335,7 @@ export function IDCBrowser({
       </label>
       <button
         className="btn primary"
-        disabled={!!busy}
+        disabled={!!busy || (isTCIA && !collection)}
         onClick={() => search()}
       >
         Find MRI series

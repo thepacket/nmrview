@@ -309,6 +309,8 @@ export async function idcDocumentation(
 }
 
 export type IDCCollection = {
+  source_url?: string;
+  source_doi?: string;
   collection_id: string;
   collection_name: string;
   description: string;

@@ -49,3 +49,9 @@ Official references:
 - [IDC collections and source documentation](https://portal.imaging.datacommons.cancer.gov/collections/)
 
 NMRView uses the public `/v3/cohort/manifest` metadata endpoint and downloads complete DICOM objects from AWS. It does not use IDC's viewer-only DICOMweb proxy for bulk downloads.
+
+## TCIA entry point
+
+The importer also exposes **TCIA · MRI collections via IDC**. `lib/tcia.ts` joins the TCIA public collection catalog (`/api/v1/collections/`) against the IDC MRI catalog using unambiguous normalized collection names/IDs. The TCIA mode requires a verified collection selection before searching or downloading, checks returned series scope, and retains TCIA documentation and DOI in case notes. It does not claim full TCIA/NBIA coverage or support restricted collections. `scripts/test-tcia.mts` verifies matching, link safety and caching. A live catalog check on 2026-09-22 found 69 matched MRI collections, including PROSTATE-MRI.
+
+Browser verification: the TCIA selector loaded the live catalog, filtered PROSTATE-MRI, listed its examinations and directly imported the 26-instance “T2 TSE ax hi” series. The resulting volume was 512 × 512 × 26, rendered in the viewer, with TCIA source URL, collection DOI and CC BY 3.0 license in Study documentation.

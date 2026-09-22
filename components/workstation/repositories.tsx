@@ -271,6 +271,7 @@ export function RepositoryBrowser({
             ? [
                 ["openneuro", "OpenNeuro · MRI"],
                 ["idc", "IDC · public MRI series"],
+                ["tcia", "TCIA · MRI collections via IDC"],
                 ["zenodo", "Zenodo · public records"],
               ]
             : [["zenodo", "Zenodo · public records"]]
@@ -289,8 +290,13 @@ export function RepositoryBrowser({
           setSelected([]);
         }}
       />
-      {provider === "idc" ? (
-        <IDCBrowser onLoad={onLoad} onDocumentation={onDocumentation} />
+      {provider === "idc" || provider === "tcia" ? (
+        <IDCBrowser
+          key={provider}
+          source={provider === "tcia" ? "tcia" : "idc"}
+          onLoad={onLoad}
+          onDocumentation={onDocumentation}
+        />
       ) : (
         <>
           <RepositoryCatalog

@@ -13,7 +13,7 @@ NMRView is a responsive research and education workstation for viewing MRI volum
 - Lightweight 1 mm MNI T1 startup reference on all devices, with an optional official 0.5 mm high-detail atlas; no smoothing by default.
 - GPU-rendered multiplanar and 3D MRI views with layers, contrast controls, slice navigation, and 4D frame playback.
 - Participant comparison, acquisition metadata, persistent measurements and manual labels, and portable session exports.
-- Local volume and DICOM import, plus direct access to compatible public OpenNeuro and Zenodo data, plus complete MRI series from Imaging Data Commons (IDC).
+- Local volume and DICOM import, plus direct access to compatible public OpenNeuro and Zenodo data, plus complete MRI series from Imaging Data Commons (IDC) and a dedicated TCIA collection browser backed by IDC.
 - Laboratory 1D/2D and tissue NIfTI-MRS workflows, with spatial localization, reversible processing, quality review, and acquisition-matched research basis fitting.
 - In-app Zenodo browsing for tissue MRS and 2D NMR, OpenNeuro MRS dataset lookup, and automatic discovery of optional acquisition notes and compatible Zenodo basis files.
 - Processed 1D spectroscopy: overlays, peak picking, integration, referencing, baseline correction, and export.
