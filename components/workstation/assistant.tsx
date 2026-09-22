@@ -64,7 +64,7 @@ export function Assistant({
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [input, setInput] = useState(""),
-    [include, setInclude] = useState(false),
+    [include, setInclude] = useState(true),
     [messages, setMessages] = useState<Entry[]>([]);
   const [resultProvider, setResultProvider] = useState("zenodo");
   const [results, setResults] = useState<DatasetResults | null>(null),
@@ -383,6 +383,9 @@ export function Assistant({
             <summary>Context & privacy</summary>
             <p className="hint">
               Your messages go to OpenRouter and the selected model provider.
+              MRI filenames, acquisition details and available case notes are
+              included by default when you send a question. You can disable
+              this below.
               Scan images are sent only when you attach a viewport preview and
               confirm sharing it for this conversation. Full scan volumes are
               never sent. Conversation stays in memory until this panel closes.
