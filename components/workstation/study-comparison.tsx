@@ -41,16 +41,19 @@ import {
   parseCollectionSession,
   paneViewKey,
   type PaneView,
+  type CollectionSession,
 } from "@/lib/collection-session";
 export function StudyComparison({
   collection,
   onClose,
   onLibrary,
+  onSession,
   onOpen,
 }: {
   collection: StudyCollection;
   onClose: () => void;
   onLibrary: () => void;
+  onSession: (session: CollectionSession) => void;
   onOpen: (
     file: File,
     view: PaneView,
@@ -193,6 +196,7 @@ export function StudyComparison({
   useEffect(() => {
     try {
       const valid = parseCollectionSession(serialized);
+      onSession(valid);
       localStorage.setItem(COLLECTION_STORAGE_KEY, JSON.stringify(valid));
       setSaveStatus(
         "Collection saved on this browser. Scan data reloads from the repository.",
@@ -202,7 +206,7 @@ export function StudyComparison({
         "Browser saving unavailable. Export the collection to keep your work.",
       );
     }
-  }, [serialized]);
+  }, [serialized, onSession]);
   const study = collection.studies.find((s) => s.id === notes);
   const file = study?.files.find(
     (f) => f.name === (choices[study.id] || study.initialFile),

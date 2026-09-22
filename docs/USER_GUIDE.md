@@ -233,6 +233,6 @@ The optional T2 and gray-matter layers remain 1 mm 2009c references and are labe
 
 ### Collection identity when saving
 
-The library saves only the active repository collection (in comparison, or a scan opened from that collection into the main viewer). Loading an individual scan does not make an older comparison collection current. If the displayed scan is a standalone import, including an IDC/DICOM series, save the actual images with **Layers → Session → Save** instead.
+The library saves the current repository collection directly from memory, including scan choices and viewing positions. Closing comparison does not prevent saving that collection, and saving does not depend on its browser autosave succeeding. Loading an individual scan does not make an older comparison collection current. If the displayed scan is a standalone import, including an IDC/DICOM series, save the actual images with **Layers → Session → Save** instead.
 
 Before saving, the library shows the source dataset title and URL. Existing entries show their original dataset and saved scan references independently of your chosen name. If an older entry named for a knee study actually lists a brain dataset, its stored references are to that brain dataset; renaming it cannot recover missing knee references. Reload the intended knee study and save the appropriate collection or MRI session. Existing snapshots are preserved by this update.

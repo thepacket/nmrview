@@ -62,6 +62,7 @@ import {
   COLLECTION_STORAGE_KEY,
   readSavedCollection,
   parseCollectionSession,
+  type CollectionSession,
   paneViewKey,
   type PaneView,
 } from "@/lib/collection-session";
@@ -119,6 +120,10 @@ export default function MRIWorkspace({
   const [assistantRecord, setAssistantRecord] = useState<
     { provider: string; id: string } | undefined
   >();
+  const [collectionSession, setCollectionSession] =
+    useState<CollectionSession | null>(null);
+  const collectionSessionRef = useRef(collectionSession);
+  collectionSessionRef.current = collectionSession;
   const [collection, setCollection] = useState<StudyCollection | null>(null);
   const [comparing, setComparing] = useState(false);
   const comparingRef = useRef(comparing);
@@ -141,16 +146,24 @@ export default function MRIWorkspace({
     setViewMode(view.mode || "fit");
     const context = mainScan.current;
     if (!context || comparingRef.current) return;
+    const saved = collectionSessionRef.current;
+    if (!saved || saved.collection.id !== context.collectionId) return;
+    const next = {
+      ...saved,
+      view: {
+        ...saved.view,
+        panes: {
+          ...saved.view.panes,
+          [paneViewKey(context.study.id, context.source.name)]: view,
+        },
+      },
+    };
+    collectionSessionRef.current = next;
+    setCollectionSession(next);
     try {
-      const saved = readSavedCollection();
-      if (!saved || saved.collection.id !== context.collectionId) return;
-      saved.view.panes = {
-        ...saved.view.panes,
-        [paneViewKey(context.study.id, context.source.name)]: view,
-      };
-      localStorage.setItem(COLLECTION_STORAGE_KEY, JSON.stringify(saved));
+      localStorage.setItem(COLLECTION_STORAGE_KEY, JSON.stringify(next));
     } catch {
-      /* Explicit collection export remains available if storage is full. */
+      /* The in-memory collection remains saveable even if autosave fails. */
     }
   }
 
@@ -160,6 +173,7 @@ export default function MRIWorkspace({
       const saved = readSavedCollection();
       if (saved) {
         setCollection(saved.collection);
+        setCollectionSession(saved);
       }
     } catch {
       toast.error(
@@ -646,7 +660,11 @@ export default function MRIWorkspace({
       setSelected(v.id);
     });
   }
-  async function importFiles(list: File[], replaceStudy = false) {
+  async function importFiles(
+    list: File[],
+    replaceStudy = false,
+    fromCollection = false,
+  ) {
     if (!list.length) return;
     setShowImport(false);
     setPlaying(false);
@@ -708,6 +726,10 @@ export default function MRIWorkspace({
       mainScan.current = null;
       setCaseContext(null);
       setDocumentation(null);
+      if (!fromCollection) {
+        setCollection(null);
+        setCollectionSession(null);
+      }
       if (sample || replaceStudy) {
         const drawingCallback = n.onDrawingChanged;
         n.onDrawingChanged = () => {};
@@ -740,6 +762,8 @@ export default function MRIWorkspace({
         mainScan.current = null;
         setCaseContext(null);
         await n.loadDocumentFromUrl(url);
+        setCollection(null);
+        setCollectionSession(null);
         setSample(false);
         setMeasurements([
           ...(n.document.completedMeasurements || []),
@@ -762,11 +786,8 @@ export default function MRIWorkspace({
   return (
     <section className="workspace" aria-label="MRI workspace">
       <CollectionLibrary
-        activeCollection={
-          comparing || mainScan.current?.collectionId === collection?.id
-            ? collection
-            : null
-        }
+        activeCollection={collection}
+        activeSession={collectionSession}
         open={libraryOpen}
         onClose={() => setLibraryOpen(false)}
         onImport={() => collectionInput.current?.click()}
@@ -775,6 +796,7 @@ export default function MRIWorkspace({
             localStorage.setItem(COLLECTION_STORAGE_KEY, JSON.stringify(saved));
             mainScan.current = null;
             setCollection(saved.collection);
+            setCollectionSession(saved);
             setDocumentation(saved.collection.documentation);
             setCollectionRevision((v) => v + 1);
             setLibraryOpen(false);
@@ -804,6 +826,7 @@ export default function MRIWorkspace({
             localStorage.setItem(COLLECTION_STORAGE_KEY, JSON.stringify(saved));
             mainScan.current = null;
             setCollection(saved.collection);
+            setCollectionSession(saved);
             setCollectionRevision((v) => v + 1);
             setLibraryOpen(false);
             setDocumentation(saved.collection.documentation);
@@ -823,6 +846,7 @@ export default function MRIWorkspace({
         <StudyComparison
           key={`${collection.id}:${collectionRevision}`}
           onLibrary={() => setLibraryOpen(true)}
+          onSession={setCollectionSession}
           collection={collection}
           onClose={() => setComparing(false)}
           onOpen={async (file, view, study, source) => {
@@ -833,7 +857,7 @@ export default function MRIWorkspace({
               previous.study.id === study.id &&
               previous.source.name === source.name;
             if (!sameScan) {
-              const ok = await importFiles([file], true);
+              const ok = await importFiles([file], true, true);
               if (!ok) return;
             }
             mainScan.current = { collectionId: collection.id, study, source };
@@ -1161,6 +1185,8 @@ export default function MRIWorkspace({
                 n.onDrawingChanged = drawingCallback;
                 n.clearAllMeasurements();
                 setMeasurements([]);
+                setCollection(null);
+                setCollectionSession(null);
                 setSample(true);
                 setTool("crosshair");
                 setLayout("3");

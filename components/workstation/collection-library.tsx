@@ -14,10 +14,7 @@ import {
   saveLibrary,
   type LibraryEntry,
 } from "@/lib/collection-library";
-import {
-  readSavedCollection,
-  type CollectionSession,
-} from "@/lib/collection-session";
+import { type CollectionSession } from "@/lib/collection-session";
 import { downloadBlob } from "./controls";
 
 export function CollectionLibrary({
@@ -26,8 +23,10 @@ export function CollectionLibrary({
   onOpen,
   onImport,
   activeCollection,
+  activeSession,
 }: {
   activeCollection: StudyCollection | null;
+  activeSession: CollectionSession | null;
   open: boolean;
   onClose: () => void;
   onOpen: (session: CollectionSession) => void;
@@ -50,10 +49,7 @@ export function CollectionLibrary({
     try {
       setEntries(parseLibrary(localStorage.getItem(LIBRARY_KEY)));
       setReadable(true);
-      const session = matchingActiveCollection(
-        readSavedCollection(),
-        activeCollection,
-      );
+      const session = matchingActiveCollection(activeSession, activeCollection);
       setCurrent(session);
       setName(session?.collection.title.slice(0, 120) || "");
     } catch (e) {
@@ -61,7 +57,7 @@ export function CollectionLibrary({
         e instanceof Error ? e.message : "Browser storage is unavailable.",
       );
     }
-  }, [open, activeCollection]);
+  }, [open, activeCollection, activeSession]);
   function write(next: LibraryEntry[], success: string) {
     try {
       saveLibrary(localStorage, next);
@@ -108,7 +104,7 @@ export function CollectionLibrary({
               onClick={() => {
                 try {
                   const latest = matchingActiveCollection(
-                    readSavedCollection(),
+                    activeSession,
                     activeCollection,
                   );
                   if (!latest || !current) {
@@ -148,6 +144,15 @@ export function CollectionLibrary({
               <br />
               {current.collection.documentation.source}
             </p>
+          )}
+          {entries.length >= 30 && (
+            <p role="status">
+              The library is full (30 snapshots). Export and remove an entry
+              before saving another.
+            </p>
+          )}
+          {current && !name.trim() && (
+            <p role="status">Enter a collection name to enable saving.</p>
           )}
           {!current && (
             <p>
