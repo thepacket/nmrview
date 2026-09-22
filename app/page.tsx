@@ -1,5 +1,6 @@
 "use client";
 import { resetSession } from "@/lib/session-reset";
+import { readStoredKey, storeKey } from "@/lib/assistant/key";
 import { useState } from "react";
 import { Assistant } from "@/components/workstation/assistant";
 import {
@@ -27,7 +28,14 @@ import { useWorkspaceTools } from "@/components/workstation/webmcp";
 import { Toaster } from "@/components/ui/sonner";
 export default function Home() {
   const [resetOpen, setResetOpen] = useState(false);
-  const [assistantKey, setAssistantKey] = useState("");
+  // Restored from localStorage; nothing rendered at mount depends on it, so
+  // the server and first client render still agree.
+  const [assistantKey, setAssistantKey] = useState(() => readStoredKey());
+  const [keyStorageFailed, setKeyStorageFailed] = useState(false);
+  function updateAssistantKey(value: string) {
+    setAssistantKey(value);
+    setKeyStorageFailed(!storeKey(value));
+  }
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [mode, setMode] = useState("mri"),
     [help, setHelp] = useState(false),
@@ -143,7 +151,8 @@ export default function Home() {
         {assistantOpen && (
           <Assistant
             apiKey={assistantKey}
-            onApiKeyChange={setAssistantKey}
+            onApiKeyChange={updateAssistantKey}
+            keyStorageFailed={keyStorageFailed}
             mode={mode}
             onClose={() => setAssistantOpen(false)}
           />
@@ -169,8 +178,8 @@ export default function Home() {
           <DialogDescription>
             Clear all loaded MRI scans, spectra, comparison views, unsaved
             annotations and the AI conversation. The app will restart with empty
-            workspaces and release its scan memory. Your AI API key will also
-            be cleared.
+            workspaces and release its scan memory. Your saved OpenRouter API
+            key stays in this browser until you use Forget key.
           </DialogDescription>
           <p>Saved collections, saved annotations and exported files remain available.
             Save any work you want to keep before resetting.</p>

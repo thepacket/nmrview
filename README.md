@@ -23,7 +23,7 @@ NMRView is a responsive research and education workstation for viewing MRI volum
 
 ## Start a fresh session
 
-Select **Reset session** (the circular arrow in the top bar) and confirm to restart with empty viewers. Save any work first: loaded scans, spectra, unsaved annotations, the AI conversation and its API key are cleared. Saved collections, saved annotations and exported files remain available.
+Select **Reset session** (the circular arrow in the top bar) and confirm to restart with empty viewers. Save any work first: loaded scans, spectra, unsaved annotations and the AI conversation are cleared. Saved collections, saved annotations, exported files and the saved OpenRouter key remain available.
 
 The reset page keeps `?session=empty` in its URL so refreshing or switching workspaces does not automatically reload spectroscopy samples or the previous collection. You can import scans or open saved collections. Reset releases the old session's memory; it does not erase the browser's disk cache. See the [user guide](docs/USER_GUIDE.md#reset-the-session).
 
@@ -94,7 +94,7 @@ The nginx configuration never re-encodes binary or already-gzipped files, sets `
 
 ## Scope and privacy
 
-Scans are processed in the browser. Optional AI messages and explicitly attached viewport images go directly to OpenRouter and the selected provider. The API key stays in tab memory. Review the sharing preview and provider policies before sending information. Local storage and exported sessions can contain sensitive metadata or image data; use synthetic or openly licensed, de-identified examples when reporting problems.
+Scans are processed in the browser. Optional AI messages and explicitly attached viewport images go directly to OpenRouter and the selected provider. The API key is saved in this browser's local storage until you choose Forget key; set a spending limit on it. Review the sharing preview and provider policies before sending information. Local storage and exported sessions can contain sensitive metadata or image data; use synthetic or openly licensed, de-identified examples when reporting problems.
 
 Images used as layers must already be registered. Comparison linking does not perform anatomical registration. Automated segmentation, raw vendor-FID processing, absolute metabolite quantification, PACS/DICOMweb integration, and clinical validation are outside the current scope. AI dots are approximate suggestions on a frozen snapshot, not validated anatomical landmarks.
 

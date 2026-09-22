@@ -10,6 +10,6 @@ Include the affected commit, browser/runtime version, impact, and minimal reprod
 
 ## Data handling
 
-Scans are processed locally in the browser. Browser-persisted annotations, collection metadata, and exported sessions may contain sensitive information. Optional assistant messages, selected metadata, and explicitly attached image previews are sent directly to OpenRouter and its selected model provider. The user-supplied API key is held in tab memory and is cleared on reload or by **Forget key**. Provider policies apply to transmitted content; clearing local chat cannot recall it.
+Scans are processed locally in the browser. Browser-persisted annotations, collection metadata, and exported sessions may contain sensitive information. Optional assistant messages, selected metadata, and explicitly attached image previews are sent directly to OpenRouter and its selected model provider. The user-supplied API key is saved in the browser's localStorage until removed with **Forget key**; treat the browser profile as holding a credential and use a key with a spending limit. Provider policies apply to transmitted content; clearing local chat cannot recall it.
 
 Treat repository descriptions, case documents, imported files, and model responses as untrusted. See the [user guide](docs/USER_GUIDE.md) for import limits and sharing behavior.

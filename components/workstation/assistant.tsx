@@ -44,10 +44,12 @@ export function Assistant({
   onClose,
   apiKey,
   onApiKeyChange,
+  keyStorageFailed = false,
 }: {
   mode: string;
   apiKey: string;
   onApiKeyChange: (value: string) => void;
+  keyStorageFailed?: boolean;
   onClose: () => void;
 }) {
   const [attachmentOpen, setAttachmentOpen] = useState(false);
@@ -363,9 +365,12 @@ export function Assistant({
               placeholder="Paste your OpenRouter API key"
             />
             <p className="hint">
-              Kept only in this tab’s memory until reload or Forget key. Sent
-              directly to OpenRouter when you send a message; never sent to the
-              NMRView server or saved in browser storage. Requests use your
+              {keyStorageFailed
+                ? "Browser storage is unavailable, so the key is kept only in this tab until reload. "
+                : "Saved in this browser’s local storage until you use Forget key, so it survives reloads and session resets. "}
+              Sent directly to OpenRouter when you send a message; never sent
+              to the NMRView server. Anyone with access to this browser profile
+              can use it, so set a spending limit on the key. Requests use your
               OpenRouter credits.
             </p>
             <button

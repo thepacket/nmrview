@@ -132,3 +132,37 @@ try {
 } finally {
   globalThis.fetch = original;
 }
+
+{
+  const { readStoredKey, storeKey, ASSISTANT_KEY_STORAGE } = await import(
+    "../lib/assistant/key.ts"
+  );
+  const memory = new Map<string, string>();
+  const store = {
+    getItem: (k: string) => memory.get(k) ?? null,
+    setItem: (k: string, v: string) => void memory.set(k, v),
+    removeItem: (k: string) => void memory.delete(k),
+  };
+  assert.equal(readStoredKey(store), "");
+  assert.equal(storeKey("sk-or-test", store), true);
+  assert.equal(memory.get(ASSISTANT_KEY_STORAGE), "sk-or-test");
+  assert.equal(readStoredKey(store), "sk-or-test");
+  assert.equal(storeKey("   ", store), true);
+  assert.equal(memory.has(ASSISTANT_KEY_STORAGE), false);
+  memory.set(ASSISTANT_KEY_STORAGE, "x".repeat(600));
+  assert.equal(readStoredKey(store), "");
+  const broken = {
+    getItem: () => {
+      throw new Error("blocked");
+    },
+    setItem: () => {
+      throw new Error("blocked");
+    },
+    removeItem: () => {},
+  };
+  assert.equal(readStoredKey(broken), "");
+  assert.equal(storeKey("sk-or-test", broken), false);
+  assert.equal(readStoredKey(undefined), "");
+  assert.equal(storeKey("sk-or-test", undefined), false);
+  console.log("PASS: assistant key storage round-trip, removal, oversize and blocked storage.");
+}
