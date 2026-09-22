@@ -27,6 +27,7 @@ import {
 } from "@/lib/assistant/viewer";
 import { searchDatasets, type DatasetResults } from "@/lib/repository-search";
 type Entry = ChatMessage & {
+  attachment?: { label: string; capturedAt: string };
   actions?: AssistantAction[];
   model?: string;
   usage?: AssistantUsage;
@@ -49,6 +50,9 @@ export function Assistant({
   onApiKeyChange: (value: string) => void;
   onClose: () => void;
 }) {
+  const [attachmentOpen, setAttachmentOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [settings, setSettings] = useState(!apiKey.trim());
   const [snapshot, setSnapshot] = useState<ScanSnapshot | null>(null);
   const [sources, setSources] = useState<{ id: string; label: string }[]>([]);
   const [shareSnapshot, setShareSnapshot] = useState(false);
@@ -120,7 +124,18 @@ export function Assistant({
     }
     const next: Entry[] = [
       ...messages,
-      { role: "user", content: input.trim() },
+      {
+        role: "user",
+        content: input.trim(),
+        ...(snapshot
+          ? {
+              attachment: {
+                label: snapshot.label,
+                capturedAt: snapshot.capturedAt,
+              },
+            }
+          : {}),
+      },
     ];
     setMessages(next);
     setInput("");
@@ -138,31 +153,19 @@ export function Assistant({
       const data = await completeAssistant(
         {
           model,
-          messages: next
-            .slice(-12)
-            .map(({ role, content }) => ({ role, content })),
+          messages: next.slice(-12).map(({ role, content, attachment }) => ({
+            role,
+            content: attachment
+              ? `${content}\n[Viewport capture: ${attachment.label}; ${attachment.capturedAt}]`
+              : content,
+          })),
           context: context.slice(0, 16000),
           ...(snapshot ? { snapshot } : {}),
         },
         apiKey,
         abort.signal,
       );
-      if (snapshot) {
-        setMessages((v) =>
-          v.map((m, i) =>
-            i === v.length - 1
-              ? {
-                  ...m,
-                  content:
-                    m.content +
-                    `\n[Asked with snapshot: ${snapshot.label}, ${snapshot.capturedAt}. Image is not resent with follow-up messages.]`,
-                }
-              : m,
-          ),
-        );
-        setSnapshot(null);
-        setShareSnapshot(false);
-      }
+      setAttachmentOpen(false);
       const actions = (data.actions || []).flatMap((a: unknown) => {
         const r = actionSchema.safeParse(a);
         return r.success ? [r.data] : [];
@@ -261,144 +264,188 @@ export function Assistant({
       (!free || (Number(m.input) === 0 && Number(m.output) === 0)),
   );
   return (
-    <aside className="assistant-panel" aria-label="AI assistant">
+    <aside
+      className={`assistant-panel${expanded ? " assistant-expanded" : ""}`}
+      aria-label="AI assistant"
+    >
       <div className="full-row">
         <h2>Assistant</h2>
+        <button
+          className="btn small"
+          aria-expanded={settings}
+          onClick={() => setSettings(!settings)}
+        >
+          Settings
+        </button>
+        <button
+          className="btn small"
+          aria-pressed={expanded}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? "Dock" : "Expand"}
+        </button>
         <button className="btn small" onClick={onClose}>
           Close
         </button>
       </div>
-      <details open={!model} className="assistant-settings">
-        <summary>{selected?.name || "Choose an OpenRouter model"}</summary>
-        <label>
-          <input
-            type="checkbox"
-            checked={free}
-            onChange={(e) => setFree(e.target.checked)}
-          />{" "}
-          Free token pricing only
-        </label>
-        <label>
-          Available tool-capable models
-          <select
-            className="field"
-            value={model}
-            disabled={busy}
-            onChange={(e) => {
-              setModel(e.target.value);
-              try {
-                localStorage.setItem("nmrview-assistant-model", e.target.value);
-              } catch {}
-            }}
-          >
-            <option value="">Select a model</option>
-            {selected && !visible.some((m) => m.id === model) && (
-              <option value={model}>{selected.name} (selected)</option>
+      {settings && (
+        <div className="assistant-configuration">
+          <details open={!model} className="assistant-settings">
+            <summary>{selected?.name || "Choose an OpenRouter model"}</summary>
+            <label>
+              <input
+                type="checkbox"
+                checked={free}
+                onChange={(e) => setFree(e.target.checked)}
+              />{" "}
+              Free token pricing only
+            </label>
+            <label>
+              Available tool-capable models
+              <select
+                className="field"
+                value={model}
+                disabled={busy}
+                onChange={(e) => {
+                  setModel(e.target.value);
+                  try {
+                    localStorage.setItem(
+                      "nmrview-assistant-model",
+                      e.target.value,
+                    );
+                  } catch {}
+                }}
+              >
+                <option value="">Select a model</option>
+                {selected && !visible.some((m) => m.id === model) && (
+                  <option value={model}>{selected.name} (selected)</option>
+                )}
+                {visible.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {selected && (
+              <p className="hint">
+                {selected.id}
+                <br />
+                {price(selected.input)} input / {price(selected.output)} output
+                per million tokens · {selected.context.toLocaleString()} context
+                tokens. Additional provider charges or account restrictions may
+                apply.
+              </p>
             )}
-            {visible.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {selected && (
-          <p className="hint">
-            {selected.id}
-            <br />
-            {price(selected.input)} input / {price(selected.output)} output per
-            million tokens · {selected.context.toLocaleString()} context tokens.
-            Additional provider charges or account restrictions may apply.
-          </p>
-        )}
-        <button
-          className="btn small"
-          disabled={catalogBusy}
-          onClick={loadModels}
-        >
-          {catalogBusy ? "Loading models…" : "Refresh model list"}
-        </button>
-      </details>
-      <details className="assistant-settings" open>
+            <button
+              className="btn small"
+              disabled={catalogBusy}
+              onClick={loadModels}
+            >
+              {catalogBusy ? "Loading models…" : "Refresh model list"}
+            </button>
+          </details>
+          <details className="assistant-settings" open={!configured}>
+            <summary>
+              OpenRouter API key {configured ? "· provided" : "· required"}
+            </summary>
+            <label htmlFor="openrouter-key">Your OpenRouter API key</label>
+            <input
+              id="openrouter-key"
+              type="password"
+              className="field"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={512}
+              value={apiKey}
+              disabled={busy}
+              onChange={(e) => onApiKeyChange(e.target.value)}
+              placeholder="Paste your OpenRouter API key"
+            />
+            <p className="hint">
+              Kept only in this tab’s memory until reload or Forget key. Sent
+              directly to OpenRouter when you send a message; never sent to the
+              NMRView server or saved in browser storage. Requests use your
+              OpenRouter credits.
+            </p>
+            <button
+              className="btn small"
+              disabled={!configured}
+              onClick={() => {
+                controller.current?.abort();
+                onApiKeyChange("");
+              }}
+            >
+              Forget key
+            </button>
+          </details>
+          <details className="assistant-settings">
+            <summary>Context & privacy</summary>
+            <p className="hint">
+              Your messages go to OpenRouter and the selected model provider.
+              Scan images are sent only when you attach a viewport preview and
+              confirm sharing it for this conversation. Full scan volumes are
+              never sent. Conversation stays in memory until this panel closes.
+              Only your model preference is saved.
+            </p>
+            <label>
+              <input
+                type="checkbox"
+                checked={include}
+                onChange={(e) => setInclude(e.target.checked)}
+              />{" "}
+              Include MRI filenames, acquisition details and case notes in
+              future messages
+            </label>
+            <button
+              className="btn small"
+              onClick={() =>
+                setContextPreview(JSON.stringify(assistantContext(), null, 2))
+              }
+            >
+              Preview MRI context
+            </button>
+            {contextPreview && (
+              <pre className="assistant-context">{contextPreview}</pre>
+            )}
+          </details>
+        </div>
+      )}
+      <details
+        className="assistant-settings assistant-attachment"
+        open={attachmentOpen}
+        onToggle={(e) => setAttachmentOpen(e.currentTarget.open)}
+      >
         <summary>
-          OpenRouter API key {configured ? "· provided" : "· required"}
+          {snapshot
+            ? `Attached: ${snapshot.label}${shareSnapshot ? " · shared with each question" : " · sharing not confirmed"}`
+            : "Attach a displayed scan"}
         </summary>
-        <label htmlFor="openrouter-key">Your OpenRouter API key</label>
-        <input
-          id="openrouter-key"
-          type="password"
-          className="field"
-          autoComplete="off"
-          spellCheck={false}
-          maxLength={512}
-          value={apiKey}
-          disabled={busy}
-          onChange={(e) => onApiKeyChange(e.target.value)}
-          placeholder="Paste your OpenRouter API key"
-        />
         <p className="hint">
-          Kept only in this tab’s memory until reload or Forget key. Sent
-          directly to OpenRouter when you send a message; never sent to the
-          NMRView server or saved in browser storage. Requests use your
-          OpenRouter credits.
-        </p>
-        <button
-          className="btn small"
-          disabled={!configured}
-          onClick={() => {
-            controller.current?.abort();
-            onApiKeyChange("");
-          }}
-        >
-          Forget key
-        </button>
-      </details>
-      <details className="assistant-settings">
-        <summary>Context & privacy</summary>
-        <p className="hint">
-          Your messages go to OpenRouter and the selected model provider. Scan
-          images are sent only when you attach a viewport preview and confirm
-          sharing it. Full scan volumes are never sent. Conversation stays in
-          memory until this panel closes. Only your model preference is saved.
-        </p>
-        <label>
-          <input
-            type="checkbox"
-            checked={include}
-            onChange={(e) => setInclude(e.target.checked)}
-          />{" "}
-          Include MRI filenames, acquisition details and case notes in future
-          messages
-        </label>
-        <button
-          className="btn small"
-          onClick={() =>
-            setContextPreview(JSON.stringify(assistantContext(), null, 2))
-          }
-        >
-          Preview MRI context
-        </button>
-        {contextPreview && (
-          <pre className="assistant-context">{contextPreview}</pre>
-        )}
-      </details>
-      <details className="assistant-settings">
-        <summary>Ask about a displayed scan</summary>
-        <p className="hint">
-          Attach the current view for questions about anatomy, orientation or
-          image quality. This is educational assistance, not a diagnostic scan
-          review.
+          Share a view to discuss visible findings, anatomy, image quality and
+          possible interpretations.
         </p>
         <button
           className="btn small"
           disabled={busy}
           onClick={() => {
             const list = availableScanSources();
-            setSources(list);
-            if (!list.length) setError("No loaded scan or spectrum view is visible.");
+            if (list.length === 1) {
+              try {
+                setAttachmentOpen(true);
+                setSnapshot(captureScanSource(list[0].id));
+                setShareSnapshot(false);
+                setSources([]);
+                setError("");
+              } catch (e) {
+                setError(String(e));
+              }
+            } else setSources(list);
+            if (!list.length)
+              setError("No loaded scan or spectrum view is visible.");
           }}
         >
-          Choose displayed scan
+          {snapshot ? "Update from displayed scan" : "Capture displayed scan"}
         </button>
         {sources.map((source) => (
           <button
@@ -407,6 +454,7 @@ export function Assistant({
             disabled={busy}
             onClick={() => {
               try {
+                setAttachmentOpen(true);
                 setSnapshot(captureScanSource(source.id));
                 setShareSnapshot(false);
                 setSources([]);
@@ -425,6 +473,16 @@ export function Assistant({
               {snapshot.label} ·{" "}
               {new Date(snapshot.capturedAt).toLocaleTimeString()}
             </p>
+            <label>
+              <input
+                type="checkbox"
+                disabled={busy}
+                checked={shareSnapshot}
+                onChange={(e) => setShareSnapshot(e.target.checked)}
+              />{" "}
+              Send this image and its displayed metadata to OpenRouter and the
+              selected model provider with each question until I remove it.
+            </label>
             <img
               src={snapshot.image}
               alt="Exact MRI viewport to send with your question"
@@ -435,9 +493,9 @@ export function Assistant({
               <pre className="assistant-context">{snapshot.metadata}</pre>
             </details>
             <p className="hint">
-              This frozen preview is sent only with your next question. Capture
-              again after changing slices. It may include visible annotations
-              and identifying details.
+              Frozen capture · kept for follow-up questions. Update after
+              changing slices. Visible annotations and identifying details are
+              included.
             </p>
             {!selected?.vision && (
               <p role="status">
@@ -445,16 +503,7 @@ export function Assistant({
                 image-capable options.
               </p>
             )}
-            <label>
-              <input
-                type="checkbox"
-                disabled={busy}
-                checked={shareSnapshot}
-                onChange={(e) => setShareSnapshot(e.target.checked)}
-              />{" "}
-              Send this image and its displayed metadata to OpenRouter and the
-              selected model provider with my next question.
-            </label>
+
             <button
               className="btn small"
               disabled={busy}
@@ -477,16 +526,23 @@ export function Assistant({
       >
         {!messages.length && (
           <p>
-            Ask me to find datasets, explain MRI acquisition details, or propose
-            display changes. For example: “Find knee MRI scans” or “Show the
-            main image in the sagittal plane.”
+            Attach a scan, then ask about visible findings, structures, contrast
+            or possible explanations. You can also ask about acquisition details
+            or viewer controls.
           </p>
         )}
+        {busy && <p role="status">Analyzing your question…</p>}
         {messages.map((m, i) => (
           <article className={`assistant-message ${m.role}`} key={i}>
             <strong>{m.role === "user" ? "You" : "Assistant"}</strong>
             {m.model && <small>{m.model}</small>}
-            <p>{m.content}</p>
+            {m.attachment && (
+              <small>
+                Scan: {m.attachment.label} ·{" "}
+                {new Date(m.attachment.capturedAt).toLocaleTimeString()}
+              </small>
+            )}
+            <AssistantText text={m.content} />
             {m.usage && <p className="hint">{usageText(m.usage)}</p>}
             {m.localization && <AssistantLocalization {...m.localization} />}
             {m.actions?.map((a, j) => (
@@ -569,17 +625,16 @@ export function Assistant({
             sumUsage(messages.flatMap((m) => (m.usage ? [m.usage] : []))),
           )}
           <br />
-          OpenRouter-reported usage for completed replies in this chat. Stopped
-          or failed requests may still incur charges.
+          Completed replies; interrupted requests may also incur charges.
         </p>
       )}
-      <form onSubmit={send}>
+      <form className="assistant-composer" onSubmit={send}>
         <p className="hint">Enter to send · Shift+Enter for a new line</p>
         <label htmlFor="assistant-prompt">Message</label>
         <textarea
           id="assistant-prompt"
           className="field"
-          rows={2}
+          rows={3}
           maxLength={4000}
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -638,5 +693,48 @@ export function Assistant({
         </div>
       </form>
     </aside>
+  );
+}
+
+// Render a small, safe Markdown subset. Model text never becomes raw HTML.
+function AssistantText({ text }: { text: string }) {
+  const inline = (line: string) =>
+    line
+      .split(/(\*\*[^*]+\*\*)/g)
+      .map((part, i) =>
+        part.startsWith("**") && part.endsWith("**") ? (
+          <strong key={i}>{part.slice(2, -2)}</strong>
+        ) : (
+          part
+        ),
+      );
+  return (
+    <div className="assistant-answer">
+      {text.split(/\n\s*\n/).map((block, i) => {
+        const lines = block.split("\n");
+        if (lines.every((line) => /^\s*[-*]\s+/.test(line)))
+          return (
+            <ul key={i}>
+              {lines.map((line, j) => (
+                <li key={j}>{inline(line.replace(/^\s*[-*]\s+/, ""))}</li>
+              ))}
+            </ul>
+          );
+        return (
+          <p key={i}>
+            {lines.map((line, j) => (
+              <span key={j}>
+                {j > 0 && <br />}
+                {/^#{1,4}\s/.test(line) ? (
+                  <strong>{inline(line.replace(/^#{1,4}\s+/, ""))}</strong>
+                ) : (
+                  inline(line)
+                )}
+              </span>
+            ))}
+          </p>
+        );
+      })}
+    </div>
   );
 }

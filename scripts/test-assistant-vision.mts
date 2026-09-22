@@ -40,7 +40,7 @@ try {
       });
     calls++;
     const body = JSON.parse(String(init?.body));
-    if (calls === 1) {
+    if (calls === 1 || calls === 3) {
       const message = body.messages.at(-1);
       assert.equal(message.role, "user");
       assert.equal(message.content[1].type, "image_url");
@@ -98,6 +98,24 @@ try {
     [],
     "no localization accepted without a snapshot",
   );
+  const followUp = await completeAssistant(
+    {
+      ...base,
+      messages: [
+        ...base.messages,
+        { role: "assistant", content: annotated.content },
+        { role: "user", content: "Explain the same structure further" },
+      ],
+      snapshot,
+    },
+    "test-key",
+    signal,
+  );
+  assert.equal(
+    followUp.dots.length,
+    1,
+    "explicitly retained capture supports visual follow-up",
+  );
   assert.equal(
     localizationSchema.safeParse({ dots: [{ label: "Bad", x: 1.1, y: 0.5 }] })
       .success,
@@ -144,7 +162,7 @@ try {
   assert.throws(() => captureScanSource("test"), /no longer available/);
   cleanup();
   console.log(
-    "PASS: image model guard, multimodal request, frozen capture metadata, no automatic image resend, image limits and hidden-pane rejection.",
+    "PASS: image model guard, multimodal request, frozen capture metadata, retained capture follow-ups, text-only removal, image limits and hidden-pane rejection.",
   );
 } finally {
   globalThis.fetch = original;
