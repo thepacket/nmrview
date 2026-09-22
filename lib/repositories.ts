@@ -85,10 +85,20 @@ export async function downloadPublic(
       : {}),
     referrerPolicy: "no-referrer",
   });
-  if (!response.ok)
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => {});
+    if (
+      response.status === 403 &&
+      u.hostname === "s3.amazonaws.com" &&
+      u.pathname.startsWith("/openneuro.org/")
+    )
+      throw new Error(
+        "OpenNeuro has not made this dataset's files publicly readable on its S3 mirror (HTTP 403). This affects some datasets regardless of the viewer; OpenNeuro's own download links fail for them too. Try another dataset or report it to OpenNeuro.",
+      );
     throw new Error(
       `Repository returned HTTP ${response.status}${response.status === 429 ? ". Please wait before trying again" : ""}.`,
     );
+  }
   const total = Number(response.headers.get("content-length")) || 0;
   if (total > limit) {
     await response.body?.cancel();

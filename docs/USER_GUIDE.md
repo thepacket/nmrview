@@ -6,19 +6,19 @@ A responsive browser workstation for MRI volumes, laboratory 1D/2D NMR spectra a
 
 ## Run
 
-Node 22.13+ is required. `npm ci`, then `npm run dev`. The normal local URL is http://localhost:5173/. `npm run build` produces a Cloudflare-compatible bundle in `dist/`.
+Node 22.13+ is required. `npm ci`, then `npm run dev`. The normal local URL is http://localhost:5173/. `npm run build` produces a static export in `dist/client`, and `npm start` serves it locally. See the README for the Fly.io/Docker deployment.
 
 ## Reset the session
 
 Use **Reset session** (the circular arrow in the top bar), then confirm. This restarts the page with empty MRI and spectroscopy workspaces, discarding loaded scans, spectra, comparisons, unsaved edits, the AI conversation and its in-memory API key. Background workers and the old viewer's memory are released by the browser. Saved collections, saved annotations and exported files are retained.
 
-The reset URL contains `?session=empty`: refreshing it or switching to spectroscopy will not load samples or restore the previous collection automatically. Import scans or open a saved collection to resume; MRI reference images and spectroscopy samples can still be loaded explicitly through their controls. This does not delete the browser's disk cache.
+The reset URL contains `?session=empty`: refreshing it or switching to spectroscopy will not load samples or restore the previous collection automatically. Import scans or open a saved collection to resume; spectroscopy samples can still be loaded explicitly through their controls. This does not delete the browser's disk cache.
 
 ## MRI workspace
 
 - Browser-local NIfTI (.nii/.nii.gz), NRRD, MGH/MGZ and DICOM-series import.
 - DICOM is converted in a Web Worker by the bundled dcm2niix WebAssembly distribution. Conversion supports its built-in JPEG codecs; unusual vendor encodings still need validation.
-- Linked axial, coronal, sagittal and volume-rendered views powered by NiiVue.
+- Linked axial, coronal, sagittal and volume-rendered views powered by NiiVue, with a small gap separating the multiplanar tiles.
 - Multiple physical-space volume layers, visibility, opacity, overlay ordering and color maps.
 - Window/level fields for the selected layer, automatic contrast, gamma, pan, zoom, crosshair, radiological convention and ruler.
 - Slice navigation, cine playback, 4D frame controls when available, and 3D clipping.
@@ -27,7 +27,7 @@ The reset URL contains `?session=empty`: refreshing it or switching to spectrosc
 - PNG screenshots, measurement JSON, and embedded NiiVue `.nvd` session save/restore.
 - DICOM import is capped at 512 MB per operation. Expanded data can consume substantially more memory.
 
-Images must already be registered. This viewer does not estimate registration, perform acquisition reconstruction, or check patient identity. A new local import replaces the reference study; later imports add layers. Check units and orientation against acquisition metadata before interpreting measurements. NiiVue mouse windowing acts on the base volume; numeric fields address the selected layer.
+Images must already be registered. This viewer does not estimate registration, perform acquisition reconstruction, or check patient identity. The first import becomes the base volume; later imports add layers unless **Replace current study** is selected. Check units and orientation against acquisition metadata before interpreting measurements. NiiVue mouse windowing acts on the base volume; numeric fields address the selected layer.
 
 Keyboard: C locate, W windowing, P pan, D distance, A angle, B draw, E erase, R reset, arrows browse slices, Space cine, Escape locate. Touch gestures are provided by NiiVue; explicit controls remain available in the mobile Controls panel.
 
@@ -63,7 +63,7 @@ For MRI and **Laboratory NMR**, open **Import scans → Public online repositori
 
 Downloads go directly from the repository to the browser with credentials omitted. The MRI/laboratory 1D importer provides progress, cancellation and a five-minute request timeout. Selection limits: 24 files, 512 MB for MRI or 60 MB for spectra. NMR ZIP extraction is asynchronous and limited to 60 MB expanded / 200 compatible entries; choose individual spectra before parsing. Failed downloads do not replace current data. Replace-current-study is on by default; disable it only to add compatible layers. File names retain repository/record identity, and NMR sessions retain source attribution.
 
-OpenNeuro uses the latest public S3 mirror, **not a pinned historical snapshot**, even when a dataset version URL is supplied. In-app keyword discovery searches OpenNeuro’s public MRI catalog and Zenodo’s open records, with pagination, descriptions, authors and license details. Filters distinguish raw/derivative MRI datasets or Zenodo datasets/all record types. Catalog results are filtered before display. OpenNeuro results require supported volume files in the inspected listings; Zenodo spectra and spectrum ZIPs must pass the 1D parser. Documents, unrelated tables, pathology images, raw FIDs and incompatible archives are excluded. Checks use up to two verification workers behind the shared request pacing queue, with one catalog page of up to ten records per explicit search, one OpenNeuro listing page per record and a 128 MB inspection budget per search. Records that cannot be verified within these limits are omitted; this is not an exhaustive catalog of all potentially compatible data. Compatibility verdicts are cached without retaining scan buffers. Known-ID lookup remains available. MRI ZIP access is described below; other archive formats, authenticated repositories, PACS and DICOMweb are not supported. Repository outages, browser access policies and rate limits can prevent downloads. No server proxy is used.
+OpenNeuro uses the latest public S3 mirror, **not a pinned historical snapshot**, even when a dataset version URL is supplied. A few datasets are listed on the mirror but their files are not publicly readable (HTTP 403); OpenNeuro's own download links fail for those too, and NMRView reports this explicitly rather than retrying. In-app keyword discovery searches OpenNeuro’s public MRI catalog and Zenodo’s open records, with pagination, descriptions, authors and license details. Filters distinguish raw/derivative MRI datasets or Zenodo datasets/all record types. Catalog results are filtered before display. OpenNeuro results require supported volume files in the inspected listings; Zenodo spectra and spectrum ZIPs must pass the 1D parser. Documents, unrelated tables, pathology images, raw FIDs and incompatible archives are excluded. Checks use up to two verification workers behind the shared request pacing queue, with one catalog page of up to ten records per explicit search, one OpenNeuro listing page per record and a 128 MB inspection budget per search. Records that cannot be verified within these limits are omitted; this is not an exhaustive catalog of all potentially compatible data. Compatibility verdicts are cached without retaining scan buffers. Known-ID lookup remains available. MRI ZIP access is described below; other archive formats, authenticated repositories, PACS and DICOMweb are not supported. Repository outages, browser access policies and rate limits can prevent downloads. No server proxy is used.
 
 ### Tissue MRS and 2D acquisition browser
 
@@ -79,9 +79,8 @@ No additional files are needed to view, phase, compare, review quality or export
 
 Scan imports remain in browser memory and are not sent to a backend. Session exports may contain the original scans and metadata. No account, PACS, DICOMweb, cloud storage, or clinical workflow integration is implemented.
 
-Bundled reference data are free:
+Bundled sample data are free:
 
-- MNI ICBM152 nonlinear asymmetric 2009c T1, T2 and gray-matter probability volumes. Original data are gzip-compressed without resampling. Permission notice and attribution: `public/data/MNI-COPYING.txt`, `public/data/ATTRIBUTION.txt`.
 - Jeannerat (2021), NMR spectra, https://doi.org/10.5281/zenodo.4616665, CC BY 4.0. Menthol and geraniol are built-in examples; glucose is also used for parser verification.
 
 Software: NiiVue (BSD-2-Clause), dcm2niix (BSD and notices in its distribution), jcampconverter 9.0.1 (MIT), React and Radix-based UI primitives. The dcm2niix browser distribution in `public/vendor` is copied from the locked npm dependency. Update it together with that dependency and rerun conversion QA.
@@ -93,9 +92,9 @@ Software: NiiVue (BSD-2-Clause), dcm2niix (BSD and notices in its distribution),
 - `python3 scripts/make-dicom-fixture.py`: creates an anonymous synthetic three-slice series in `/tmp/nmrview-dicom-test`. Import all three files in the MRI workspace. Expected dimensions: 32 × 32 × 3; spacing: 1 × 2 × 3 mm.
 - `node --experimental-strip-types scripts/test-spectroscopy-analysis.mts`: spectroscopy processing, quality, geometry, basis fitting and map regressions.
 - `node --experimental-strip-types scripts/test-mrs-support.mts`: mocked optional-file discovery, matching, ambiguity, request limits and acquisition candidate filtering.
-- `npm run build`
+- `npm run build`, then `npm start` to serve the export locally, or `docker build .` to build the deployable nginx image.
 
-Browser QA covered DICOM fixture conversion with expected geometry, rendering the MNI volume, layered T1/T2/gray-matter controls, distance recording, NMR overlay/stacked views, peak detection and integration, import workflows and desktop/mobile breakpoints. The tissue-MRS browser was also checked against the public NIfTI-MRS example record, including search, direct file-list loading and preservation of the displayed spectrum after an invalid import. This is functional QA, not clinical validation, an exhaustive DICOM conformance suite, or testing on physical mobile devices.
+Browser QA covered DICOM fixture conversion with expected geometry, rendering imported volumes with layered controls, distance recording, NMR overlay/stacked views, peak detection and integration, import workflows and desktop/mobile breakpoints. The tissue-MRS browser was also checked against the public NIfTI-MRS example record, including search, direct file-list loading and preservation of the displayed spectrum after an invalid import. This is functional QA, not clinical validation, an exhaustive DICOM conformance suite, or testing on physical mobile devices.
 
 The optional WebMCP tools `read_workspace` and `set_workspace` are feature-detected and share the UI's active workspace. Valid switching and invalid input were checked in a supported browser.
 
@@ -121,7 +120,7 @@ Comparison loading has per-pane cancellation/retry, a five-minute deadline, earl
 
 ## Viewing state and collection library
 
-Main and comparison views now use the same scan-view controller. **Fit image** keeps the complete reference volume fitted as controls open or the viewport resizes. Panning or changing the zoom enters **Manual zoom**; resizing preserves the 2D display scale in CSS pixels per millimetre and the physical pan coordinates. Fit does not change contrast, slice position, measurements or labels. Restore images remains the stronger recovery action. Pure 3D views retain NiiVue's camera behavior; physical scale preservation applies to slice views.
+Main and comparison views now use the same scan-view controller. **Fit image** keeps the complete base volume fitted as controls open or the viewport resizes. Panning or changing the zoom enters **Manual zoom**; resizing preserves the 2D display scale in CSS pixels per millimetre and the physical pan coordinates. Fit does not change contrast, slice position, measurements or labels. Restore images remains the stronger recovery action. Pure 3D views retain NiiVue's camera behavior; physical scale preservation applies to slice views.
 
 Comparison controls are docked rather than covering the images. Each participant has immediately available Fit, Open in main viewer and Expand actions. Opening a comparison scan in the main viewer carries its contrast, cursor, 4D frame and fit/manual state across. Main-view changes return to comparison through the saved collection. Returning to the same already-loaded main scan reuses it, preserving its measurements and labels; opening a different scan still replaces the main study. Repository scan annotations now follow the scan between both views (see below).
 
@@ -159,7 +158,7 @@ This limits retained voxel arrays, not total process memory: one parser's tempor
 
 For a repository scan, open **Annotations** on its comparison pane, or **Controls → Scan annotations** in the main viewer. Distance and angle tools record physical coordinates and the current time frame. Rename, locate or delete each measurement; Locate restores its frame, plane and position. Draw/erase labels on slice views, rename regions, undo strokes and keep scan notes. Label maps cover the spatial volume and are shared across time frames. This is manual segmentation; no automatic tissue or lesion segmentation is performed.
 
-Measurements, region names, notes and label maps follow the same repository scan between main and comparison views. They autosave separately in IndexedDB and survive a reload. Collection snapshots contain viewing arrangements, not annotation copies. Imported local volumes and the built-in atlas retain the existing MRI `.nvd` session workflow. Autosave is browser-local, not multi-user or cross-tab collaboration: edit a scan in one browser tab at a time. Storage failure is reported; export before leaving if saving fails. An unreadable existing record is not overwritten.
+Measurements, region names, notes and label maps follow the same repository scan between main and comparison views. They autosave separately in IndexedDB and survive a reload. Collection snapshots contain viewing arrangements, not annotation copies. Imported local volumes retain the existing MRI `.nvd` session workflow. Autosave is browser-local, not multi-user or cross-tab collaboration: edit a scan in one browser tab at a time. Storage failure is reported; export before leaving if saving fails. An unreadable existing record is not overwritten.
 
 **Export annotations** produces an `.nmra` package containing measurements, notes, label names and raw label voxels without the source MRI. **Import annotations** replaces the current scan's annotation record only when source identity, geometry, dimensions and frame count agree. **Measurement report** exports formatted JSON including physical coordinates, frames, scan identity and region definitions; **NIfTI labels** exports the label map for other imaging tools. Packages are bounded to 64 MB of label voxels plus 2 MB of metadata. Retained annotation label buffers are capped at 128 MB; renderer copies and pending storage writes add memory. Eight native undo states are kept per viewer; undo history is not exported or restored across viewers.
 
@@ -229,13 +228,9 @@ Each completed reply displays OpenRouter's reported input/output tokens and cost
 
 With a scan snapshot attached, ask for structures to be marked. The model can propose up to twelve labeled points using normalized coordinates on the entire captured image. **Show proposed dots** reveals numbered, high-contrast dots, with labels and **Enlarge image** for review. These are approximate AI suggestions on a frozen snapshot, not registered 3D landmarks, segmentations, measurements or annotations on the changing live scan. No localization is accepted without an attached image, and invalid coordinates are rejected. Tests cover usage totals, missing/zero values and localization bounds; the anatomical accuracy of model-generated dots has not been clinically validated.
 
-## Startup reference resolution
+## Startup
 
-All devices start with the lighter ICBM 2009c **1 mm T1 atlas** (about 15 MiB), with nearest-neighbor display and no smoothing. Startup does not download or prefetch the high-detail atlas.
-
-The official ICBM 2009b asymmetric **0.5 mm T1 atlas** (394 × 466 × 378) is available on demand: in **Layers → Reference image quality**, select **High detail** and choose **Load free reference**. This explicitly downloads six verified parts (about 121 MiB total). The unchanged NIfTI is losslessly compressed. This is an averaged anatomical template, not an individual scan; finer sampling does not establish equivalent acquired resolution.
-
-The optional T2 and gray-matter layers remain 1 mm 2009c references and are labeled accordingly. Their sampling and template version differ from the high-detail T1. Larger data require more memory and longer first-load downloads; smoothing is not used to conceal source resolution.
+The MRI workspace starts empty. No reference volume is bundled or downloaded; only scans you explicitly import or open from a repository are displayed. Native-voxel (nearest-neighbor) sampling remains the default, and smoothing is never used to conceal source resolution. Resetting the session returns to the empty viewer.
 
 ### Collection identity when saving
 

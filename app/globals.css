@@ -813,12 +813,6 @@ button svg {
 .layer .control label {
   font-size: 12px;
 }
-.sample-add {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
 .spacer {
   flex: 1;
 }

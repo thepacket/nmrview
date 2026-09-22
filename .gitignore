@@ -37,15 +37,8 @@ yarn-error.log*
 # typescript
 next-env.d.ts
 /dist/
-/.wrangler/
-# Checkout-local execution profile and tool state; never publish them.
-/.sites-runtime/
-/.agents/
-/.codex/
+# Local scratch output; never publish it.
 /outputs/
 /work/
 
 *.tsbuildinfo
-
-# Local Cloudflare secrets
-.dev.vars*

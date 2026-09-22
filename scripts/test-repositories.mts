@@ -61,6 +61,19 @@ try {
     ).text(),
     "1234",
   );
+  globalThis.fetch = async () => new Response("", { status: 403 });
+  await assert.rejects(
+    downloadPublic(
+      "https://s3.amazonaws.com/openneuro.org/ds999999/sub-01/anat/sub-01_T1w.nii.gz",
+      5,
+      new AbortController().signal,
+    ),
+    /not made this dataset's files publicly readable/,
+  );
+  await assert.rejects(
+    downloadPublic("https://zenodo.org/file", 5, new AbortController().signal),
+    /HTTP 403/,
+  );
   globalThis.fetch = async () => new Response("", { status: 429 });
   await assert.rejects(
     downloadPublic("https://zenodo.org/file", 5, new AbortController().signal),

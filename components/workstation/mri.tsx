@@ -1,9 +1,4 @@
 "use client";
-import {
-  referenceAtlas,
-  defaultAtlasQuality,
-  type AtlasQuality,
-} from "@/lib/reference-atlas";
 import { registerMRSAnatomy } from "@/lib/nmr/anatomy";
 import { registerScanSource, snapshotCanvas } from "@/lib/assistant/scan";
 import { registerAssistantViewer } from "@/lib/assistant/viewer";
@@ -91,6 +86,8 @@ type Layer = {
   frames: number;
   frame: number;
 };
+// Gap between the axial, coronal, sagittal and 3D tiles in CSS pixels.
+const MULTIPLANAR_PAD = 8;
 const MODES = [
   ["3", "Multiplanar + 3D"],
   ["0", "Axial"],
@@ -187,7 +184,6 @@ export default function MRIWorkspace({
     null,
   );
   const [notesOpen, setNotesOpen] = useState(false);
-  const startupAtlasAbort = useRef<AbortController | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null),
     nv = useRef<Niivue | null>(null),
     files = useRef<HTMLInputElement>(null),
@@ -196,12 +192,10 @@ export default function MRIWorkspace({
     busyRef = useRef(false),
     prevImport = useRef(importTick);
   const [ready, setReady] = useState(false),
-    [busy, setBusy] = useState("Loading open brain reference…"),
+    [busy, setBusy] = useState("Starting viewer…"),
     [error, setError] = useState(""),
     [layers, setLayers] = useState<Layer[]>([]),
     [selected, setSelected] = useState(""),
-    [sample, setSample] = useState(true),
-    [atlasQuality, setAtlasQuality] = useState<AtlasQuality>("light"),
     [showImport, setShowImport] = useState(false),
     [tool, setTool] = useState("crosshair"),
     [layout, setLayout] = useState("3"),
@@ -274,12 +268,10 @@ export default function MRIWorkspace({
   );
   useEffect(() => {
     let cancelled = false;
-    const atlasAbort = new AbortController();
-    startupAtlasAbort.current = atlasAbort;
     let instance: Niivue | undefined;
     async function start() {
       try {
-        const { Niivue, NVImage } = await import("@niivue/niivue");
+        const { Niivue } = await import("@niivue/niivue");
         if (cancelled || !canvas.current) return;
         instance = new Niivue({
           isNearestInterpolation: true,
@@ -295,6 +287,7 @@ export default function MRIWorkspace({
           fontSizeScaling: 0.4,
           multiplanarShowRender: 1,
           multiplanarLayout: 0,
+          multiplanarPadPixels: MULTIPLANAR_PAD,
           dragAndDropEnabled: false,
           maxDrawUndoBitmaps: 8,
           isRadiologicalConvention: false,
@@ -327,37 +320,7 @@ export default function MRIWorkspace({
           setMeasurements((s) => [...s, m]);
         instance.onAngleCompleted = (m) => setMeasurements((s) => [...s, m]);
         instance.onImageLoaded = () => sync();
-        if (isEmptySession()) {
-          startupAtlasAbort.current = null;
-          setSample(false);
-          setReady(true);
-          sync();
-          setBusy("");
-          return;
-        }
-        const quality = defaultAtlasQuality();
-        setAtlasQuality(quality);
-        try {
-          const ref = await referenceAtlas(quality, atlasAbort.signal, setBusy);
-          if (cancelled) return;
-          const image = await NVImage.loadFromUrl(ref);
-          if (cancelled) return;
-          instance.addVolume(image);
-        } catch (e) {
-          if (cancelled) return;
-          if (quality === "light") throw e;
-          setAtlasQuality("light");
-          toast.info(
-            "High-detail reference could not load. Showing the lightweight 1 mm atlas.",
-          );
-          await instance.loadVolumes([
-            { url: "/data/mni-t1.nii.gz", name: "MNI152_T1.nii.gz" },
-          ]);
-        }
-        if (cancelled) return;
-        startupAtlasAbort.current = null;
-        await instance.setVolumeRenderIllumination(0.6);
-        controller.current?.fit();
+        // The viewer starts empty: only explicitly imported scans are shown.
         setReady(true);
         sync();
         setBusy("");
@@ -371,7 +334,6 @@ export default function MRIWorkspace({
     start();
     return () => {
       cancelled = true;
-      atlasAbort.abort();
       controller.current?.dispose();
       controller.current = null;
       instance?.cleanup();
@@ -667,26 +629,6 @@ export default function MRIWorkspace({
     n.updateGLVolume();
     sync();
   }
-  function addSample(kind: string) {
-    run("Loading aligned reference layer…", async () => {
-      const n = nv.current;
-      if (!n) return;
-      const { NVImage } = await import("@niivue/niivue");
-      const name = `MNI152_${kind.toUpperCase()}.nii.gz`;
-      if (n.volumes.some((v) => v.name === name)) {
-        toast.info("This reference layer is already loaded.");
-        return;
-      }
-      const v = await NVImage.loadFromUrl({
-        url: `/data/mni-${kind}.nii.gz`,
-        name,
-        colormap: kind === "gm" ? "warm" : "gray",
-        opacity: kind === "gm" ? 0.45 : 0.5,
-      });
-      n.addVolume(v);
-      setSelected(v.id);
-    });
-  }
   async function importFiles(
     list: File[],
     replaceStudy = false,
@@ -757,7 +699,7 @@ export default function MRIWorkspace({
         setCollection(null);
         setCollectionSession(null);
       }
-      if (sample || replaceStudy) {
+      if (replaceStudy) {
         const drawingCallback = n.onDrawingChanged;
         n.onDrawingChanged = () => {};
         n.closeDrawing();
@@ -765,7 +707,6 @@ export default function MRIWorkspace({
         n.clearAllMeasurements();
         setMeasurements([]);
         for (const v of [...n.volumes]) n.removeVolume(v);
-        setSample(false);
       }
       for (const v of parsed) {
         if (n.volumes.length) v.opacity = 0.5;
@@ -791,7 +732,6 @@ export default function MRIWorkspace({
         await n.loadDocumentFromUrl(url);
         setCollection(null);
         setCollectionSession(null);
-        setSample(false);
         setMeasurements([
           ...(n.document.completedMeasurements || []),
           ...(n.document.completedAngles || []),
@@ -800,6 +740,8 @@ export default function MRIWorkspace({
         setCross(n.opts.crosshairWidth > 0);
         setNearest(n.opts.isNearestInterpolation);
         n.setHighResolutionCapable(0);
+        // Saved sessions carry their own options; keep the tile spacing.
+        n.opts.multiplanarPadPixels = MULTIPLANAR_PAD;
         setRadiological(n.opts.isRadiologicalConvention);
         setPos(Array.from(n.scene.crosshairPos));
         controller.current?.capture();
@@ -983,24 +925,16 @@ export default function MRIWorkspace({
           >
             Collection library
           </button>
-          <p className="eyebrow">
-            {sample ? "Reference study" : "Loaded study"}
-          </p>
+          <p className="eyebrow">Loaded study</p>
           <h2 className="study-title">
-            {sample
-              ? "MNI152 brain atlas"
-              : base?.name.replace(/\.nii(\.gz)?$/, "") || "No study loaded"}
+            {base?.name.replace(/\.nii(\.gz)?$/, "") || "No study loaded"}
           </h2>
           <p className="meta">
-            {sample
-              ? base?.name.includes("2009b")
-                ? "ICBM 2009b · 0.5 mm native voxels"
-                : "ICBM 2009c · 1 mm native voxels"
-              : "Images stay on this device"}
+            {base
+              ? "Images stay on this device"
+              : "Import a scan or open a repository record to begin"}
           </p>
-          <span className="badge">
-            {sample ? "FREE REFERENCE DATA" : "LOCAL FILES"}
-          </span>
+          <span className="badge">{base ? "LOCAL FILES" : "EMPTY VIEWER"}</span>
         </div>
         <div className="panel-section">
           {collection && (
@@ -1122,24 +1056,6 @@ export default function MRIWorkspace({
             <Plus />
             Add scan or series
           </button>
-          {sample && (
-            <div className="sample-add">
-              <button
-                className="btn small"
-                disabled={!!busy}
-                onClick={() => addSample("t2")}
-              >
-                + T2 reference (1 mm)
-              </button>
-              <button
-                className="btn small"
-                disabled={!!busy}
-                onClick={() => addSample("gm")}
-              >
-                + Gray matter (1 mm)
-              </button>
-            </div>
-          )}
           <p className="hint">
             Overlays use image coordinates. Import scans already registered to
             the same anatomy.
@@ -1172,59 +1088,6 @@ export default function MRIWorkspace({
           <p className="hint">
             Sessions include volumes, views, measurements and drawings.
           </p>
-          <label>
-            Reference image quality
-            <select
-              className="field"
-              value={atlasQuality}
-              disabled={!!busy}
-              onChange={(e) => setAtlasQuality(e.target.value as AtlasQuality)}
-            >
-              <option value="detail">High detail · 0.5 mm · 121 MiB</option>
-              <option value="light">Lightweight · 1 mm · 15 MiB</option>
-            </select>
-          </label>
-          <p className="hint">
-            Choose quality, then load the reference. High detail needs more
-            memory. No smoothing is applied.
-          </p>
-          <button
-            className="btn ghost wide"
-            disabled={!!busy}
-            onClick={() =>
-              run("Loading reference study…", async () => {
-                const n = nv.current;
-                if (!n) return;
-                const ref = await referenceAtlas(
-                  atlasQuality,
-                  new AbortController().signal,
-                  setBusy,
-                );
-                const { NVImage } = await import("@niivue/niivue");
-                const image = await NVImage.loadFromUrl(ref);
-                while (n.volumes.length) n.removeVolume(n.volumes[0]);
-                n.addVolume(image);
-                mainScan.current = null;
-                setCaseContext(null);
-                const drawingCallback = n.onDrawingChanged;
-                n.onDrawingChanged = () => {};
-                n.closeDrawing();
-                n.onDrawingChanged = drawingCallback;
-                n.clearAllMeasurements();
-                setMeasurements([]);
-                setCollection(null);
-                setCollectionSession(null);
-                setSample(true);
-                setTool("crosshair");
-                setLayout("3");
-                n.setSliceType(3);
-                reset();
-              })
-            }
-          >
-            <BookOpen />
-            Load free reference
-          </button>
         </div>
         <div className="panel-section">
           <div className="switch-row" style={{ marginTop: 0 }}>
@@ -1275,11 +1138,11 @@ export default function MRIWorkspace({
       >
         <div className="view-heading">
           <h1>
-            {sample
-              ? "Brain atlas"
-              : caseContext
-                ? `${caseContext.study.participant} ${caseContext.study.session}`
-                : "Loaded study"}{" "}
+            {caseContext
+              ? `${caseContext.study.participant} ${caseContext.study.session}`
+              : layers.length
+                ? "Loaded study"
+                : "MRI viewer"}{" "}
             <span className="meta">
               / {MODES.find((x) => x[0] === layout)?.[1]}
             </span>
@@ -1384,14 +1247,6 @@ export default function MRIWorkspace({
             <div className="loading" role="status">
               <Brain />
               <span>{busy}</span>
-              {startupAtlasAbort.current && atlasQuality === "detail" && (
-                <button
-                  className="btn"
-                  onClick={() => startupAtlasAbort.current?.abort()}
-                >
-                  Use lightweight 1 mm reference
-                </button>
-              )}
             </div>
           )}
           {error && !busy && (
@@ -1905,8 +1760,8 @@ export default function MRIWorkspace({
               </button>
             </div>
             <p>
-              Adding your first scan replaces the example study. Later imports
-              become layers. Use aligned scans from the same subject; overlays
+              The first scan becomes the base volume. Later imports become
+              layers unless you replace the study. Use aligned scans from the same subject; overlays
               are not automatically registered.
             </p>
           </div>

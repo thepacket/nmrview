@@ -5,9 +5,6 @@ export const metadata: Metadata = {
   title: "NMRView — MRI & spectroscopy",
   description:
     "A browser workstation for MRI volumes and NMR spectroscopy. Local data processing, layered views, and research tools.",
-  other: {
-    "codex-preview": "development",
-  },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

@@ -196,8 +196,10 @@ export default function Home() {
             </p>
             <h3>MRI imaging</h3>
             <p>
-              Open NIfTI (.nii, .nii.gz), NRRD, or a series of DICOM files. All
-              parsing and rendering happens locally in your browser. Scans are
+              The viewer starts empty and shows only the scans you load. Open
+              NIfTI (.nii, .nii.gz), NRRD, or a series of DICOM files, or
+              browse a public repository. All parsing and rendering happens
+              locally in your browser. Scans are
               overlaid using their physical coordinate transforms; they must
               already be registered to the same anatomy. NMRView does not
               perform automatic registration.
@@ -207,29 +209,6 @@ export default function Home() {
               Choose Laboratory NMR for 1D spectra and quality review, 2D NMR for processed spectral maps, or Tissue MRS for online NIfTI-MRS acquisitions, anatomical localization and acquisition-matched basis analysis. Processing stays in the browser.
             </p>
             <h3>Free sample data</h3>
-            <p>
-              MRI:{" "}
-              <a
-                href="https://www.bic.mni.mcgill.ca/ServicesAtlases/ICBM152NLin2009"
-                target="_blank"
-                rel="noreferrer"
-              >
-                MNI ICBM152 template
-              </a>
-              , Fonov et al., supplied through{" "}
-              <a
-                href="https://github.com/niivue/niivue-demo-images"
-                target="_blank"
-                rel="noreferrer"
-              >
-                NiiVue
-              </a>
-              . Freely usable with the original copyright notice; see{" "}
-              <a href="/data/ATTRIBUTION.txt" target="_blank">
-                data attribution
-              </a>
-              .
-            </p>
             <p>
               NMR: Damien Jeannerat,{" "}
               <a

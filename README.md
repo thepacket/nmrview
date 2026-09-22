@@ -10,7 +10,7 @@ NMRView is a responsive research and education workstation for viewing MRI volum
 
 ## Features
 
-- Lightweight 1 mm MNI T1 startup reference on all devices, with an optional official 0.5 mm high-detail atlas; no smoothing by default.
+- Empty MRI workspace at startup: nothing is downloaded or displayed until you explicitly import a scan or open a repository record. No smoothing by default.
 - GPU-rendered multiplanar and 3D MRI views with layers, contrast controls, slice navigation, and 4D frame playback.
 - Participant comparison, acquisition metadata, persistent measurements and manual labels, and portable session exports.
 - Local volume and DICOM import, plus direct access to compatible public OpenNeuro and Zenodo data, plus complete MRI series from Imaging Data Commons (IDC) and a dedicated TCIA collection browser backed by IDC.
@@ -25,7 +25,7 @@ NMRView is a responsive research and education workstation for viewing MRI volum
 
 Select **Reset session** (the circular arrow in the top bar) and confirm to restart with empty viewers. Save any work first: loaded scans, spectra, unsaved annotations, the AI conversation and its API key are cleared. Saved collections, saved annotations and exported files remain available.
 
-The reset page keeps `?session=empty` in its URL so refreshing or switching workspaces does not automatically reload sample scans or the previous collection. You can import scans, open saved collections or explicitly load reference data again. Reset releases the old session's memory; it does not erase the browser's disk cache. See the [user guide](docs/USER_GUIDE.md#reset-the-session).
+The reset page keeps `?session=empty` in its URL so refreshing or switching workspaces does not automatically reload spectroscopy samples or the previous collection. You can import scans or open saved collections. Reset releases the old session's memory; it does not erase the browser's disk cache. See the [user guide](docs/USER_GUIDE.md#reset-the-session).
 
 ## Choose a spectroscopy workflow
 
@@ -60,7 +60,25 @@ npm test
 npm run build
 ```
 
-The build produces a Cloudflare-compatible bundle in `dist/`. `npm start` runs that build locally using Wrangler. The checked-in `.openai/hosting.json` identifies the maintainer's deployment; configure your own hosting project for independent deployment. It is not an access credential.
+The build is a static export in `dist/client`: the whole application runs in the browser and needs no application server. `npm start` serves that export locally at http://127.0.0.1:4173/ for a production check.
+
+## Deploy
+
+The repository ships a [Dockerfile](Dockerfile) that builds the export and serves it with an unprivileged nginx ([deploy/nginx.conf](deploy/nginx.conf)), plus a [fly.toml](fly.toml) for [Fly.io](https://fly.io/). No secrets, databases or environment variables are required; the OpenRouter key is entered by each user in the browser and never reaches the server.
+
+```sh
+fly launch --copy-config --no-deploy   # first time: creates the app named in fly.toml
+fly deploy
+```
+
+Subsequent releases are `fly deploy` again. The image can also run anywhere Docker runs:
+
+```sh
+docker build -t nmrview .
+docker run --rm -p 8080:8080 nmrview
+```
+
+The nginx configuration never re-encodes binary or already-gzipped files, sets `application/wasm` for the bundled DICOM converter, and serves the JCAMP samples as plain text. Keep those rules if you serve the export from another host: the viewer reads `.nii.gz` files by their bytes, and WebAssembly needs its MIME type for streaming compilation.
 
 ## Documentation
 
@@ -84,4 +102,4 @@ Images used as layers must already be registered. Comparison linking does not pe
 
 Copyright (c) 2026 Andre Paquette.
 
-Original NMRView code and documentation are licensed under the [MIT License](LICENSE). Bundled third-party code and reference data retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md). The MIT license does not relicense downloaded datasets or remove their attribution requirements.
+Original NMRView code and documentation are licensed under the [MIT License](LICENSE). Bundled third-party code and sample data retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md). The MIT license does not relicense downloaded datasets or remove their attribution requirements.

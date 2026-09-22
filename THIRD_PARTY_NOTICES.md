@@ -2,14 +2,12 @@
 
 The root MIT license covers original NMRView code and documentation. It does not replace the licenses of dependencies, copied vendor files, or data. Preserve the notices shipped with redistributed components.
 
-## Bundled files and reference data
+## Bundled files and sample data
 
 | Component | License / notice |
 | --- | --- |
 | dcm2niix browser distribution and codecs | [Distribution notices](public/vendor/dcm2niix/LICENSE.txt) |
 | Vendored shadcn Tailwind styles | [License](vendor/shadcn-tailwind-4.13.0.LICENSE.md) |
-| Sites Vite build plugin | [License](build/sites-vite-plugin.LICENSE) |
-| MNI ICBM152 reference volumes | [Original permission notice](public/data/MNI-COPYING.txt) and [attribution](public/data/ATTRIBUTION.txt) |
 | Damien Jeannerat's sample NMR spectra | CC BY 4.0; [attribution and source](public/data/ATTRIBUTION.txt) |
 
 ## Package dependencies
