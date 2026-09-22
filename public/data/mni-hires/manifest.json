@@ -1,0 +1,48 @@
+{
+  "source": "https://www.bic.mni.mcgill.ca/~vfonov/icbm/2009/mni_icbm152_nlin_asym_09b_nifti.zip",
+  "name": "MNI152_T1_2009b_0.5mm.nii.gz",
+  "dimensions": [
+    394,
+    466,
+    378
+  ],
+  "voxelMM": [
+    0.5,
+    0.5,
+    0.5
+  ],
+  "uncompressedSha256": "654ee15b0ba284ff2967299bdf471327f67e04fdb936fe141fd95f2885950ca8",
+  "bytes": 126293215,
+  "parts": [
+    {
+      "name": "t1-00.bin",
+      "bytes": 23068672,
+      "sha256": "6b68fddd7b6a5bffde66eb26e6ef7d4bfd9701b2a2dd3cc38954edd890e7c3bd"
+    },
+    {
+      "name": "t1-01.bin",
+      "bytes": 23068672,
+      "sha256": "b942d6c8eb79fffb92c83e2ff1de5bfecb35dc6b7d5d437cf614e99bfc7b79d1"
+    },
+    {
+      "name": "t1-02.bin",
+      "bytes": 23068672,
+      "sha256": "4c8a2063a7869c9a10b777c0505e824f8acee4b2d5c069d2362f9b00e8597975"
+    },
+    {
+      "name": "t1-03.bin",
+      "bytes": 23068672,
+      "sha256": "ab1abfd50afa3d28b5a2d7ca17df3d5474a6565d35753800691972e7776815d6"
+    },
+    {
+      "name": "t1-04.bin",
+      "bytes": 23068672,
+      "sha256": "208392202db0506462a11b33e754d172e44b3d8db21c0690986a451d7afc4007"
+    },
+    {
+      "name": "t1-05.bin",
+      "bytes": 10949855,
+      "sha256": "c6a5797961e2eeb90c9cb33b1b8ec3746cbaf9992d50fb9666c27ce1f1d46bb6"
+    }
+  ]
+}

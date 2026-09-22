@@ -27,3 +27,12 @@ Experimental data accompanying Application of multiplet structure deconvolution
 to extract scalar coupling constants from 1D NMR spectra, Damien Jeannerat and
 Carlos Cobas. Files are unmodified. Display normalization, reference shifts,
 and baseline correction are local viewing operations and do not alter these files.
+
+High-detail startup T1 (public/data/mni-hires):
+ICBM 152 Nonlinear Asymmetric 2009b, native 0.5 x 0.5 x 0.5 mm template.
+Source: https://www.bic.mni.mcgill.ca/~vfonov/icbm/2009/mni_icbm152_nlin_asym_09b_nifti.zip
+Original file: mni_icbm152_t1_tal_nlin_asym_09b_hires.nii
+The original NIfTI is losslessly gzip-compressed and split into static hosting parts.
+No resampling, smoothing, intensity changes or AI enhancement were applied.
+The manifest records checksums; mni-hires/COPYING.txt retains the source notice.
+Same Fonov et al. (2011) citation and MNI permissions as above.

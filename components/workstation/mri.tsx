@@ -1,4 +1,9 @@
 "use client";
+import {
+  referenceAtlas,
+  defaultAtlasQuality,
+  type AtlasQuality,
+} from "@/lib/reference-atlas";
 import { registerMRSAnatomy } from "@/lib/nmr/anatomy";
 import { registerScanSource, snapshotCanvas } from "@/lib/assistant/scan";
 import { registerAssistantViewer } from "@/lib/assistant/viewer";
@@ -167,6 +172,7 @@ export default function MRIWorkspace({
     null,
   );
   const [notesOpen, setNotesOpen] = useState(false);
+  const startupAtlasAbort = useRef<AbortController | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null),
     nv = useRef<Niivue | null>(null),
     files = useRef<HTMLInputElement>(null),
@@ -180,6 +186,7 @@ export default function MRIWorkspace({
     [layers, setLayers] = useState<Layer[]>([]),
     [selected, setSelected] = useState(""),
     [sample, setSample] = useState(true),
+    [atlasQuality, setAtlasQuality] = useState<AtlasQuality>("light"),
     [showImport, setShowImport] = useState(false),
     [tool, setTool] = useState("crosshair"),
     [layout, setLayout] = useState("3"),
@@ -252,10 +259,12 @@ export default function MRIWorkspace({
   );
   useEffect(() => {
     let cancelled = false;
+    const atlasAbort = new AbortController();
+    startupAtlasAbort.current = atlasAbort;
     let instance: Niivue | undefined;
     async function start() {
       try {
-        const { Niivue } = await import("@niivue/niivue");
+        const { Niivue, NVImage } = await import("@niivue/niivue");
         if (cancelled || !canvas.current) return;
         instance = new Niivue({
           isNearestInterpolation: true,
@@ -303,10 +312,27 @@ export default function MRIWorkspace({
           setMeasurements((s) => [...s, m]);
         instance.onAngleCompleted = (m) => setMeasurements((s) => [...s, m]);
         instance.onImageLoaded = () => sync();
-        await instance.loadVolumes([
-          { url: "/data/mni-t1.nii.gz", name: "MNI152_T1.nii.gz" },
-        ]);
+        const quality = defaultAtlasQuality();
+        setAtlasQuality(quality);
+        try {
+          const ref = await referenceAtlas(quality, atlasAbort.signal, setBusy);
+          if (cancelled) return;
+          const image = await NVImage.loadFromUrl(ref);
+          if (cancelled) return;
+          instance.addVolume(image);
+        } catch (e) {
+          if (cancelled) return;
+          if (quality === "light") throw e;
+          setAtlasQuality("light");
+          toast.info(
+            "High-detail reference could not load. Showing the lightweight 1 mm atlas.",
+          );
+          await instance.loadVolumes([
+            { url: "/data/mni-t1.nii.gz", name: "MNI152_T1.nii.gz" },
+          ]);
+        }
         if (cancelled) return;
+        startupAtlasAbort.current = null;
         await instance.setVolumeRenderIllumination(0.6);
         controller.current?.fit();
         setReady(true);
@@ -322,6 +348,7 @@ export default function MRIWorkspace({
     start();
     return () => {
       cancelled = true;
+      atlasAbort.abort();
       controller.current?.dispose();
       controller.current = null;
       instance?.cleanup();
@@ -400,7 +427,10 @@ export default function MRIWorkspace({
     const m = n.frac2mm(p);
     setMM(Array.from(m).slice(0, 3));
   }
-  useEffect(() => registerMRSAnatomy(() => busy ? undefined : nv.current?.volumes[0]), [busy]);
+  useEffect(
+    () => registerMRSAnatomy(() => (busy ? undefined : nv.current?.volumes[0])),
+    [busy],
+  );
   useEffect(
     () =>
       registerAssistantViewer({
@@ -907,7 +937,9 @@ export default function MRIWorkspace({
           </h2>
           <p className="meta">
             {sample
-              ? "Anatomical reference · ICBM 2009c"
+              ? base?.name.includes("2009b")
+                ? "ICBM 2009b · 0.5 mm native voxels"
+                : "ICBM 2009c · 1 mm native voxels"
               : "Images stay on this device"}
           </p>
           <span className="badge">
@@ -1041,14 +1073,14 @@ export default function MRIWorkspace({
                 disabled={!!busy}
                 onClick={() => addSample("t2")}
               >
-                + T2 reference
+                + T2 reference (1 mm)
               </button>
               <button
                 className="btn small"
                 disabled={!!busy}
                 onClick={() => addSample("gm")}
               >
-                + Gray matter
+                + Gray matter (1 mm)
               </button>
             </div>
           )}
@@ -1084,6 +1116,22 @@ export default function MRIWorkspace({
           <p className="hint">
             Sessions include volumes, views, measurements and drawings.
           </p>
+          <label>
+            Reference image quality
+            <select
+              className="field"
+              value={atlasQuality}
+              disabled={!!busy}
+              onChange={(e) => setAtlasQuality(e.target.value as AtlasQuality)}
+            >
+              <option value="detail">High detail · 0.5 mm · 121 MiB</option>
+              <option value="light">Lightweight · 1 mm · 15 MiB</option>
+            </select>
+          </label>
+          <p className="hint">
+            Choose quality, then load the reference. High detail needs more
+            memory. No smoothing is applied.
+          </p>
           <button
             className="btn ghost wide"
             disabled={!!busy}
@@ -1091,9 +1139,15 @@ export default function MRIWorkspace({
               run("Loading reference study…", async () => {
                 const n = nv.current;
                 if (!n) return;
-                await n.loadVolumes([
-                  { url: "/data/mni-t1.nii.gz", name: "MNI152_T1.nii.gz" },
-                ]);
+                const ref = await referenceAtlas(
+                  atlasQuality,
+                  new AbortController().signal,
+                  setBusy,
+                );
+                const { NVImage } = await import("@niivue/niivue");
+                const image = await NVImage.loadFromUrl(ref);
+                while (n.volumes.length) n.removeVolume(n.volumes[0]);
+                n.addVolume(image);
                 mainScan.current = null;
                 setCaseContext(null);
                 const drawingCallback = n.onDrawingChanged;
@@ -1272,6 +1326,14 @@ export default function MRIWorkspace({
             <div className="loading" role="status">
               <Brain />
               <span>{busy}</span>
+              {startupAtlasAbort.current && atlasQuality === "detail" && (
+                <button
+                  className="btn"
+                  onClick={() => startupAtlasAbort.current?.abort()}
+                >
+                  Use lightweight 1 mm reference
+                </button>
+              )}
             </div>
           )}
           {error && !busy && (
