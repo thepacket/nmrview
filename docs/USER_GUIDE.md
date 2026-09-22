@@ -225,9 +225,9 @@ With a scan snapshot attached, ask for structures to be marked. The model can pr
 
 ## Startup reference resolution
 
-Desktop startup uses the official ICBM 2009b asymmetric **0.5 mm T1 atlas** (394 × 466 × 378), with nearest-neighbor display and no smoothing. This is an averaged anatomical template, not an individual scan; finer sampling does not establish equivalent acquired resolution. The unchanged NIfTI is losslessly compressed into six verified download parts (about 121 MiB total).
+All devices start with the lighter ICBM 2009c **1 mm T1 atlas** (about 15 MiB), with nearest-neighbor display and no smoothing. Startup does not download or prefetch the high-detail atlas.
 
-Touch-first devices and browsers reporting 2 GB or less of device memory default to the lighter ICBM 2009c **1 mm atlas**. In **Layers → Reference image quality**, select either version and choose **Load free reference**. During the initial high-detail download, **Use lightweight 1 mm reference** skips to the smaller version. A failed high-detail startup falls back to the 1 mm reference.
+The official ICBM 2009b asymmetric **0.5 mm T1 atlas** (394 × 466 × 378) is available on demand: in **Layers → Reference image quality**, select **High detail** and choose **Load free reference**. This explicitly downloads six verified parts (about 121 MiB total). The unchanged NIfTI is losslessly compressed. This is an averaged anatomical template, not an individual scan; finer sampling does not establish equivalent acquired resolution.
 
 The optional T2 and gray-matter layers remain 1 mm 2009c references and are labeled accordingly. Their sampling and template version differ from the high-detail T1. Larger data require more memory and longer first-load downloads; smoothing is not used to conceal source resolution.
 

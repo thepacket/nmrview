@@ -10,7 +10,7 @@ NMRView is a responsive research and education workstation for viewing MRI volum
 
 ## Features
 
-- Official 0.5 mm MNI T1 startup reference on desktop, with a lightweight 1 mm option for mobile or limited-memory devices; no smoothing by default.
+- Lightweight 1 mm MNI T1 startup reference on all devices, with an optional official 0.5 mm high-detail atlas; no smoothing by default.
 - GPU-rendered multiplanar and 3D MRI views with layers, contrast controls, slice navigation, and 4D frame playback.
 - Participant comparison, acquisition metadata, persistent measurements and manual labels, and portable session exports.
 - Local volume and DICOM import, plus direct access to compatible public OpenNeuro and Zenodo data, plus complete MRI series from Imaging Data Commons (IDC).

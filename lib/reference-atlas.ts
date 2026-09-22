@@ -1,13 +1,7 @@
 export type AtlasQuality = "detail" | "light";
 export function defaultAtlasQuality(): AtlasQuality {
-  if (typeof window === "undefined") return "light";
-  // Touch-first and memory-constrained devices retain the smaller startup atlas.
-  const memory = (navigator as Navigator & { deviceMemory?: number })
-    .deviceMemory;
-  return window.matchMedia("(pointer: coarse)").matches ||
-    (memory !== undefined && memory <= 2)
-    ? "light"
-    : "detail";
+  // Large reference volumes are opt-in, regardless of device capability.
+  return "light";
 }
 export async function referenceAtlas(
   quality: AtlasQuality,
